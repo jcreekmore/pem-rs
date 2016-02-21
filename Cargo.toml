@@ -1,0 +1,8 @@
+[package]
+name = "pem"
+version = "0.1.0"
+authors = ["Jonathan Creekmore <jonathan@thecreekmores.org>"]
+
+[dependencies]
+rustc-serialize = "0.3"
+regex = "0.1"

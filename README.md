@@ -3,6 +3,8 @@ pem
 
 A Rust library for parsing and encoding PEM-encoded data.
 
+[![Build Status](https://travis-ci.org/jcreekmore/pem-rs.svg?branch=master)](https://travis-ci.org/jcreekmore/pem-rs)
+
 ### Documentation
 [Module documentation with examples](http://jcreekmore.gitlab.io/pem-rs/)
 

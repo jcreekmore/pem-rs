@@ -52,6 +52,43 @@
 //!  let pem = parse(SAMPLE).unwrap();
 //!  assert_eq!(pem.tag, "RSA PRIVATE KEY");
 //! ```
+//!
+//! # Example: parse a set of PEM-encoded test
+//!
+//! Sometimes, PEM-encoded files contain multiple chunks of PEM-encoded
+//! text. You might see this if you have an x.509 certificate file that
+//! also includes intermediate certificates.
+//!
+//! ```rust
+//!
+//! use pem::parse_many;
+//!
+//! const SAMPLE: &'static str = "-----BEGIN INTERMEDIATE CERT-----
+//! MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+//! dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+//! 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+//! AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+//! DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+//! TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+//! ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+//! -----END INTERMEDIATE CERT-----
+//!
+//! -----BEGIN CERTIFICATE-----
+//! MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+//! dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+//! 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+//! AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+//! DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+//! TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+//! ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+//! -----END CERTIFICATE-----
+//! ";
+//!
+//!  let pems = parse_many(SAMPLE);
+//!  assert_eq!(pems.len(), 2);
+//!  assert_eq!(pems[0].tag, "INTERMEDIATE CERT");
+//!  assert_eq!(pems[1].tag, "CERTIFICATE");
+//! ```
 
 #![deny(missing_docs,
         missing_debug_implementations, missing_copy_implementations,

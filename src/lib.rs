@@ -249,6 +249,14 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
     }
 
     #[test]
+    fn parse_empty_data() {
+        let input = "-----BEGIN DATA-----
+-----END DATA-----";
+        let pem = super::parse(&input).unwrap();
+        assert_eq!(pem.contents.len(), 0);
+    }
+
+    #[test]
     fn parse_many_works() {
         let pems = super::parse_many(SAMPLE);
         assert_eq!(pems.len(), 2);

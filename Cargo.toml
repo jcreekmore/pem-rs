@@ -2,6 +2,12 @@
 name = "pem"
 version = "0.1.0"
 authors = ["Jonathan Creekmore <jonathan@thecreekmores.org>"]
+repository = "https://github.com/jcreekmore/pem-rs.git"
+homepage = "https://github.com/jcreekmore/pem-rs.git"
+license = "MIT"
+readme = "README.md"
+documentation = "http://jcreekmore.github.io/pem-rs/"
+description = "Parse and encode PEM-encoded data."
 
 [dependencies]
 rustc-serialize = "0.3"

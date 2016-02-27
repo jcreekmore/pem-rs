@@ -143,47 +143,7 @@ pub fn parse_many(input: &str) -> Vec<Pem> {
     // Each time our regex matches a PEM section, we need to decode it.
     re.captures_iter(input)
       .filter_map(|caps| {
-          // Verify that the begin section exists
-          let tag = match caps.name("begin") {
-              Some(t) => t,
-              None => {
-                  return None;
-              }
-          };
-
-          // as well as the end section
-          let tag_end = match caps.name("end") {
-              Some(t) => t,
-              None => {
-                  return None;
-              }
-          };
-
-          // The beginning and the end sections must match
-          if tag != tag_end {
-              return None;
-          }
-
-          // If they did, then we can grab the data section
-          let data = match caps.name("data") {
-              Some(d) => d,
-              None => {
-                  return None;
-              }
-          };
-
-          // And decode it from Base64 into a vector of u8
-          let contents = match data.replace("\n", "").from_base64() {
-              Ok(c) => c,
-              Err(_) => {
-                  return None;
-              }
-          };
-
-          Some(Pem {
-              tag: tag.to_owned(),
-              contents: contents,
-          })
+          parse_helper(caps)
       })
       .collect()
 }

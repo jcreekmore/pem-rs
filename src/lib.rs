@@ -69,6 +69,27 @@ use regex::{Captures, Regex};
 const PEM_SECTION: &'static str =
     r"(?s)-----BEGIN (?P<begin>.*?)-----\s*(?P<data>.*?)-----END (?P<end>.*?)-----\s*";
 
+/// An error that occurred during parsing Pem-encoded data
+#[derive(PartialEq,Clone,Copy,Debug)]
+pub enum Error {
+    /// PEM-encoded data is not framed correctly
+    PemFraming,
+    /// Invalid beginning tag
+    InvalidBeginTag,
+    /// Invalid ending tag
+    InvalidEndTag,
+    /// Mismatched beginning and ending tags
+    MismatchedTags,
+    /// Invalid base64-encoded data section
+    InvalidData,
+    /// Hints that destructuring should not be exhaustive.
+    ///
+    /// This enum may grow additional variants, so this makes
+    /// sure that clients don't count on exhaustive matching.
+    #[doc(hidden)]
+    __Nonexhaustive,
+}
+
 /// A representation of Pem-encoded data
 #[derive(Debug)]
 pub struct Pem {
@@ -78,35 +99,26 @@ pub struct Pem {
     pub contents: Vec<u8>,
 }
 
-fn parse_helper(caps: Captures) -> Option<Pem> {
+fn parse_helper(caps: Captures) -> Result<Pem, Error> {
     // Verify that the begin section exists
-    let tag = match caps.name("begin") {
-        Some(t) => t,
-        None => {
-            return None;
-        }
-    };
+    let tag = caps.name("begin").unwrap();
+    if tag == "" {
+        return Err(Error::InvalidBeginTag);
+    }
 
     // as well as the end section
-    let tag_end = match caps.name("end") {
-        Some(t) => t,
-        None => {
-            return None;
-        }
-    };
+    let tag_end = caps.name("end").unwrap();
+    if tag_end == "" {
+        return Err(Error::InvalidEndTag);
+    }
 
     // The beginning and the end sections must match
     if tag != tag_end {
-        return None;
+        return Err(Error::MismatchedTags);
     }
 
     // If they did, then we can grab the data section
-    let data = match caps.name("data") {
-        Some(d) => d,
-        None => {
-            return None;
-        }
-    };
+    let data = caps.name("data").unwrap();
 
     // Replace whitespace
     let data = data.replace("\n", "").replace(" ", "");
@@ -115,23 +127,23 @@ fn parse_helper(caps: Captures) -> Option<Pem> {
     let contents = match data.from_base64() {
         Ok(c) => c,
         Err(_) => {
-            return None;
+            return Err(Error::InvalidData);
         }
     };
 
-    Some(Pem {
+    Ok(Pem {
         tag: tag.to_owned(),
         contents: contents,
     })
 }
 
 /// Parses a single Pem-encoded data from a string.
-pub fn parse(input: &str) -> Option<Pem> {
+pub fn parse(input: &str) -> Result<Pem, Error> {
     let re = Regex::new(PEM_SECTION).unwrap();
 
     match re.captures(input) {
         Some(caps) => parse_helper(caps),
-        None => None,
+        None => Err(Error::PemFraming),
     }
 }
 
@@ -142,9 +154,7 @@ pub fn parse_many(input: &str) -> Vec<Pem> {
 
     // Each time our regex matches a PEM section, we need to decode it.
     re.captures_iter(input)
-      .filter_map(|caps| {
-          parse_helper(caps)
-      })
+      .filter_map(|caps| parse_helper(caps).ok())
       .collect()
 }
 
@@ -175,6 +185,67 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
     fn parse_works() {
         let pem = super::parse(SAMPLE).unwrap();
         assert_eq!(pem.tag, "RSA PRIVATE KEY");
+    }
+
+    #[test]
+    fn parse_invalid_framing() {
+        let input = "--BEGIN data-----
+        -----END data-----";
+        match super::parse(&input) {
+            Ok(_) => assert!(false),
+            Err(code) => assert_eq!(code, super::Error::PemFraming),
+        }
+    }
+
+    #[test]
+    fn parse_invalid_begin() {
+        let input = "-----BEGIN -----
+MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oYo
+QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0
+RFI1MrnzRbCmOkM6tgVO0cd6r5Z4bDGLusH9yjI9iI84gPRjK0AzymXFmBGuREHI
+sQIhAPKf4pp+Prvutgq2ayygleZChBr1DC4XnnufBNtaswyvAiEAzNGVKgNvzuhk
+ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
+/+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
+RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
+-----END RSA PUBLIC KEY-----";
+        match super::parse(&input) {
+            Ok(_) => assert!(false),
+            Err(code) => assert_eq!(code, super::Error::InvalidBeginTag),
+        }
+    }
+
+    #[test]
+    fn parse_invalid_end() {
+        let input = "-----BEGIN DATA-----
+MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oYo
+QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0
+RFI1MrnzRbCmOkM6tgVO0cd6r5Z4bDGLusH9yjI9iI84gPRjK0AzymXFmBGuREHI
+sQIhAPKf4pp+Prvutgq2ayygleZChBr1DC4XnnufBNtaswyvAiEAzNGVKgNvzuhk
+ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
+/+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
+RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
+-----END -----";
+        match super::parse(&input) {
+            Ok(_) => assert!(false),
+            Err(code) => assert_eq!(code, super::Error::InvalidEndTag),
+        }
+    }
+
+    #[test]
+    fn parse_invalid_data() {
+        let input = "-----BEGIN DATA-----
+MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oY?
+QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0
+RFI1MrnzRbCmOkM6tgVO0cd6r5Z4bDGLusH9yjI9iI84gPRjK0AzymXFmBGuREHI
+sQIhAPKf4pp+Prvutgq2ayygleZChBr1DC4XnnufBNtaswyvAiEAzNGVKgNvzuhk
+ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
+/+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
+RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
+-----END DATA-----";
+        match super::parse(&input) {
+            Ok(_) => assert!(false),
+            Err(code) => assert_eq!(code, super::Error::InvalidData),
+        }
     }
 
     #[test]

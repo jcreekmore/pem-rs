@@ -18,55 +18,56 @@ pub fn parse(input: &str) -> Vec<Pem> {
     let re = Regex::new(PEM_SECTION).unwrap();
 
     // Each time our regex matches a PEM section, we need to decode it.
-    re.captures_iter(input).filter_map(|caps| {
-        // Verify that the begin section exists
-        let tag = match caps.name("begin") {
-            Some(t) => t,
-            None => {
-                return None;
-            }
-        };
+    re.captures_iter(input)
+      .filter_map(|caps| {
+          // Verify that the begin section exists
+          let tag = match caps.name("begin") {
+              Some(t) => t,
+              None => {
+                  return None;
+              }
+          };
 
-        // as well as the end section
-        let tag_end = match caps.name("end") {
-            Some(t) => t,
-            None => {
-                return None;
-            }
-        };
+          // as well as the end section
+          let tag_end = match caps.name("end") {
+              Some(t) => t,
+              None => {
+                  return None;
+              }
+          };
 
-        // The beginning and the end sections must match
-        if tag != tag_end {
-            return None;
-        }
+          // The beginning and the end sections must match
+          if tag != tag_end {
+              return None;
+          }
 
-        // If they did, then we can grab the data section
-        let data = match caps.name("data") {
-            Some(d) => d,
-            None => {
-                return None;
-            }
-        };
+          // If they did, then we can grab the data section
+          let data = match caps.name("data") {
+              Some(d) => d,
+              None => {
+                  return None;
+              }
+          };
 
-        // And decode it from Base64 into a vector of u8
-        let contents = match data.replace("\n", "").from_base64() {
-            Ok(c) => c,
-            Err(_) => {
-                return None;
-            }
-        };
+          // And decode it from Base64 into a vector of u8
+          let contents = match data.replace("\n", "").from_base64() {
+              Ok(c) => c,
+              Err(_) => {
+                  return None;
+              }
+          };
 
-        Some(Pem {
-            tag: tag.to_owned(),
-            contents: contents,
-        })
-    }).collect()
+          Some(Pem {
+              tag: tag.to_owned(),
+              contents: contents,
+          })
+      })
+      .collect()
 }
 
 #[cfg(test)]
 mod test {
-    const SAMPLE: &'static str =
-"-----BEGIN RSA PRIVATE KEY-----
+    const SAMPLE: &'static str = "-----BEGIN RSA PRIVATE KEY-----
 MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
 dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei

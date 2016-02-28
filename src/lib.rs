@@ -100,7 +100,7 @@
 extern crate rustc_serialize;
 extern crate regex;
 
-use rustc_serialize::base64::FromBase64;
+use rustc_serialize::base64::{Config, FromBase64, STANDARD, ToBase64};
 use regex::{Captures, Regex};
 
 const PEM_SECTION: &'static str =
@@ -128,7 +128,7 @@ pub enum Error {
 }
 
 /// A representation of Pem-encoded data
-#[derive(Debug)]
+#[derive(PartialEq,Debug)]
 pub struct Pem {
     /// The tag extracted from the Pem-encoded data
     pub tag: String,
@@ -195,27 +195,51 @@ pub fn parse_many(input: &str) -> Vec<Pem> {
       .collect()
 }
 
+/// Encode a Pem struct into a Pem-encoded data string
+pub fn encode(pem: &Pem) -> String {
+    let mut output = String::new();
+
+    let contents;
+
+    if pem.contents.is_empty() {
+        contents = String::from("");
+    } else {
+        contents = pem.contents.to_base64(Config { line_length: Some(62), ..STANDARD });
+    }
+
+    output.push_str(&format!("-----BEGIN {}-----\r\n", pem.tag));
+    output.push_str(&format!("{}\r\n", contents));
+    output.push_str(&format!("-----END {}-----\r\n", pem.tag));
+
+    output
+}
+
+/// Encode multiple Pem structs into a set of Pem-encoded data strings
+pub fn encode_many(pems: &[Pem]) -> String {
+    pems.iter().map(encode).collect::<Vec<String>>().join("\r\n")
+}
+
 #[cfg(test)]
 mod test {
-    const SAMPLE: &'static str = "-----BEGIN RSA PRIVATE KEY-----
-MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
-dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
-2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
-AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
-DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
-TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
-ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
------END RSA PRIVATE KEY-----
-
------BEGIN RSA PUBLIC KEY-----
-MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oYo
-QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0
-RFI1MrnzRbCmOkM6tgVO0cd6r5Z4bDGLusH9yjI9iI84gPRjK0AzymXFmBGuREHI
-sQIhAPKf4pp+Prvutgq2ayygleZChBr1DC4XnnufBNtaswyvAiEAzNGVKgNvzuhk
-ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
-/+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
-RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
------END RSA PUBLIC KEY-----
+    const SAMPLE: &'static str = "-----BEGIN RSA PRIVATE KEY-----\r
+MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc\r
+dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO\r
+2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei\r
+AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un\r
+DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT\r
+TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh\r
+ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ\r
+-----END RSA PRIVATE KEY-----\r
+\r
+-----BEGIN RSA PUBLIC KEY-----\r
+MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oYo\r
+QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0\r
+RFI1MrnzRbCmOkM6tgVO0cd6r5Z4bDGLusH9yjI9iI84gPRjK0AzymXFmBGuREHI\r
+sQIhAPKf4pp+Prvutgq2ayygleZChBr1DC4XnnufBNtaswyvAiEAzNGVKgNvzuhk\r
+ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6\r
+/+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g\r
+RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg\r
+-----END RSA PUBLIC KEY-----\r
 ";
 
     #[test]
@@ -299,5 +323,39 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
         assert_eq!(pems.len(), 2);
         assert_eq!(pems[0].tag, "RSA PRIVATE KEY");
         assert_eq!(pems[1].tag, "RSA PUBLIC KEY");
+    }
+
+    #[test]
+    fn encode_empty_contents() {
+        let pem = super::Pem {
+            tag: String::from("FOO"),
+            contents: vec![],
+        };
+        let encoded = super::encode(&pem);
+        assert!(encoded != "");
+
+        let pem_out = super::parse(&encoded).unwrap();
+        assert_eq!(&pem, &pem_out);
+    }
+
+    #[test]
+    fn encode_contents() {
+        let pem = super::Pem {
+            tag: String::from("FOO"),
+            contents: vec![1, 2, 3, 4],
+        };
+        let encoded = super::encode(&pem);
+        assert!(encoded != "");
+
+        let pem_out = super::parse(&encoded).unwrap();
+        assert_eq!(&pem, &pem_out);
+    }
+
+    #[test]
+    fn encode_many() {
+        let pems = super::parse_many(SAMPLE);
+        let encoded = super::encode_many(&pems);
+
+        assert_eq!(SAMPLE, encoded);
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "pem"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Jonathan Creekmore <jonathan@thecreekmores.org>"]
 repository = "https://github.com/jcreekmore/pem-rs.git"
 homepage = "https://github.com/jcreekmore/pem-rs.git"

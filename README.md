@@ -14,13 +14,13 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-pem = "0.1"
+pem = "0.2"
 ```
 
 and this to your crate root:
 
 ```rust
-extern crate regex;
+extern crate pem;
 ```
 
 Here is a simple example that parse PEM-encoded data and prints the tag:

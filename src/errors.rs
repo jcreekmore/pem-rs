@@ -8,13 +8,13 @@
 error_chain! {
     foreign_links {
         InvalidData(::rustc_serialize::base64::FromBase64Error);
+        NotUtf8(::std::str::Utf8Error);
     }
     errors {
         MalformedFraming
-        MissingTag(t: String) {
-            description("missing tag")
-            display("missing \"{}\" tag", t)
-        }
+        MissingBeginTag
+        MissingEndTag
+        MissingData
         MismatchedTags(b: String, e: String) {
             description("mismatching BEGIN and END tags")
             display("mismatching BEGIN (\"{}\") and END (\"{}\") tags", b, e)

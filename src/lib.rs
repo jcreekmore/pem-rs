@@ -109,7 +109,7 @@ extern crate regex;
 pub mod errors;
 pub use errors::*;
 
-use regex::{Captures, Regex};
+use regex::bytes::{Captures, Regex};
 use rustc_serialize::base64::{Config, FromBase64, STANDARD, ToBase64};
 
 const REGEX_STR: &'static str =
@@ -130,20 +130,26 @@ pub struct Pem {
 
 impl Pem {
     fn new_from_captures(caps: Captures) -> Result<Pem> {
+        fn as_utf8<'a>(bytes: &'a [u8]) -> Result<&'a str> {
+            std::str::from_utf8(bytes).map_err(|e| ErrorKind::NotUtf8(e).into())
+        }
+
         // Verify that the begin section exists
-        let tag = caps.name("begin").unwrap();
-        ensure!(tag != "", ErrorKind::MissingTag("BEGIN".into()));
+        let tag =
+            as_utf8(caps.name("begin").ok_or_else(|| ErrorKind::MissingBeginTag)?.as_bytes())?;
+        ensure!(!tag.is_empty(), ErrorKind::MissingBeginTag);
 
         // as well as the end section
-        let tag_end = caps.name("end").unwrap();
-        ensure!(tag_end != "", ErrorKind::MissingTag("END".into()));
+        let tag_end =
+            as_utf8(caps.name("end").ok_or_else(|| ErrorKind::MissingEndTag)?.as_bytes())?;
+        ensure!(!tag_end.is_empty(), ErrorKind::MissingEndTag);
 
         // The beginning and the end sections must match
         ensure!(tag == tag_end,
                 ErrorKind::MismatchedTags(tag.into(), tag_end.into()));
 
         // If they did, then we can grab the data section
-        let data = caps.name("data").unwrap();
+        let data = as_utf8(caps.name("data").ok_or_else(|| ErrorKind::MissingData)?.as_bytes())?;
 
         // Replace whitespace
         let data = data.replace("\n", "").replace(" ", "");
@@ -159,16 +165,16 @@ impl Pem {
 }
 
 /// Parses a single Pem-encoded data from a string.
-pub fn parse(input: &str) -> Result<Pem> {
-    ASCII_ARMOR.captures(input)
+pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
+    ASCII_ARMOR.captures(&input.as_ref())
         .ok_or_else(|| ErrorKind::MalformedFraming.into())
         .and_then(Pem::new_from_captures)
 }
 
 /// Parses a set of Pem-encoded data from a string.
-pub fn parse_many(input: &str) -> Vec<Pem> {
+pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Vec<Pem> {
     // Each time our regex matches a PEM section, we need to decode it.
-    ASCII_ARMOR.captures_iter(input)
+    ASCII_ARMOR.captures_iter(&input.as_ref())
         .filter_map(|caps| Pem::new_from_captures(caps).ok())
         .collect()
 }
@@ -250,7 +256,7 @@ ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
 RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 -----END RSA PUBLIC KEY-----";
         match parse(&input) {
-            Err(Error(ErrorKind::MissingTag(ref t), _)) => assert_eq!(t, "BEGIN"),
+            Err(Error(ErrorKind::MissingBeginTag, _)) => assert!(true),
             _ => assert!(false),
         }
     }
@@ -267,7 +273,7 @@ ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
 RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 -----END -----";
         match parse(&input) {
-            Err(Error(ErrorKind::MissingTag(ref t), _)) => assert_eq!(t, "END"),
+            Err(Error(ErrorKind::MissingEndTag, _)) => assert!(true),
             _ => assert!(false),
         }
     }

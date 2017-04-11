@@ -128,46 +128,48 @@ pub struct Pem {
     pub contents: Vec<u8>,
 }
 
-fn parse_helper(caps: Captures) -> Result<Pem> {
-    // Verify that the begin section exists
-    let tag = caps.name("begin").unwrap();
-    ensure!(tag != "", ErrorKind::MissingTag("BEGIN".into()));
+impl Pem {
+    fn new_from_captures(caps: Captures) -> Result<Pem> {
+        // Verify that the begin section exists
+        let tag = caps.name("begin").unwrap();
+        ensure!(tag != "", ErrorKind::MissingTag("BEGIN".into()));
 
-    // as well as the end section
-    let tag_end = caps.name("end").unwrap();
-    ensure!(tag_end != "", ErrorKind::MissingTag("END".into()));
+        // as well as the end section
+        let tag_end = caps.name("end").unwrap();
+        ensure!(tag_end != "", ErrorKind::MissingTag("END".into()));
 
-    // The beginning and the end sections must match
-    ensure!(tag == tag_end,
-            ErrorKind::MismatchedTags(tag.into(), tag_end.into()));
+        // The beginning and the end sections must match
+        ensure!(tag == tag_end,
+                ErrorKind::MismatchedTags(tag.into(), tag_end.into()));
 
-    // If they did, then we can grab the data section
-    let data = caps.name("data").unwrap();
+        // If they did, then we can grab the data section
+        let data = caps.name("data").unwrap();
 
-    // Replace whitespace
-    let data = data.replace("\n", "").replace(" ", "");
+        // Replace whitespace
+        let data = data.replace("\n", "").replace(" ", "");
 
-    // And decode it from Base64 into a vector of u8
-    let contents = try!(data.from_base64().map_err(ErrorKind::InvalidData));
+        // And decode it from Base64 into a vector of u8
+        let contents = try!(data.from_base64().map_err(ErrorKind::InvalidData));
 
-    Ok(Pem {
-        tag: tag.to_owned(),
-        contents: contents,
-    })
+        Ok(Pem {
+            tag: tag.to_owned(),
+            contents: contents,
+        })
+    }
 }
 
 /// Parses a single Pem-encoded data from a string.
 pub fn parse(input: &str) -> Result<Pem> {
     ASCII_ARMOR.captures(input)
         .ok_or_else(|| ErrorKind::MalformedFraming.into())
-        .and_then(parse_helper)
+        .and_then(Pem::new_from_captures)
 }
 
 /// Parses a set of Pem-encoded data from a string.
 pub fn parse_many(input: &str) -> Vec<Pem> {
     // Each time our regex matches a PEM section, we need to decode it.
     ASCII_ARMOR.captures_iter(input)
-        .filter_map(|caps| parse_helper(caps).ok())
+        .filter_map(|caps| Pem::new_from_captures(caps).ok())
         .collect()
 }
 

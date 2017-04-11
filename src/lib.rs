@@ -19,7 +19,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! pem = "0.1"
+//! pem = "0.3"
 //! ```
 //!
 //! and this to your crate root:
@@ -164,14 +164,124 @@ impl Pem {
     }
 }
 
-/// Parses a single Pem-encoded data from a string.
+/// Parses a single PEM-encoded data from a data-type that can be dereferenced as a [u8].
+///
+/// # Example: parse PEM-encoded data from a Vec<u8>
+/// ```rust
+///
+/// use pem::parse;
+///
+/// const SAMPLE: &'static str = "-----BEGIN RSA PRIVATE KEY-----
+/// MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+/// dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+/// 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+/// AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+/// DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+/// TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+/// ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+/// -----END RSA PRIVATE KEY-----
+/// ";
+/// let SAMPLE_BYTES: Vec<u8> = SAMPLE.into();
+///
+///  let pem = parse(SAMPLE_BYTES).unwrap();
+///  assert_eq!(pem.tag, "RSA PRIVATE KEY");
+/// ```
+///
+/// # Example: parse PEM-encoded data from a String
+/// ```rust
+///
+/// use pem::parse;
+///
+/// const SAMPLE: &'static str = "-----BEGIN RSA PRIVATE KEY-----
+/// MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+/// dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+/// 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+/// AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+/// DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+/// TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+/// ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+/// -----END RSA PRIVATE KEY-----
+/// ";
+/// let SAMPLE_STRING: String = SAMPLE.into();
+///
+///  let pem = parse(SAMPLE_STRING).unwrap();
+///  assert_eq!(pem.tag, "RSA PRIVATE KEY");
+/// ```
 pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
     ASCII_ARMOR.captures(&input.as_ref())
         .ok_or_else(|| ErrorKind::MalformedFraming.into())
         .and_then(Pem::new_from_captures)
 }
 
-/// Parses a set of Pem-encoded data from a string.
+/// Parses a set of PEM-encoded data from a data-type that can be dereferenced as a [u8].
+///
+/// # Example: parse a set of PEM-encoded data from a Vec<u8>
+///
+/// ```rust
+///
+/// use pem::parse_many;
+///
+/// const SAMPLE: &'static str = "-----BEGIN INTERMEDIATE CERT-----
+/// MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+/// dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+/// 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+/// AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+/// DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+/// TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+/// ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+/// -----END INTERMEDIATE CERT-----
+///
+/// -----BEGIN CERTIFICATE-----
+/// MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+/// dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+/// 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+/// AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+/// DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+/// TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+/// ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+/// -----END CERTIFICATE-----
+/// ";
+/// let SAMPLE_BYTES: Vec<u8> = SAMPLE.into();
+///
+///  let pems = parse_many(SAMPLE_BYTES);
+///  assert_eq!(pems.len(), 2);
+///  assert_eq!(pems[0].tag, "INTERMEDIATE CERT");
+///  assert_eq!(pems[1].tag, "CERTIFICATE");
+/// ```
+///
+/// # Example: parse a set of PEM-encoded data from a String
+///
+/// ```rust
+///
+/// use pem::parse_many;
+///
+/// const SAMPLE: &'static str = "-----BEGIN INTERMEDIATE CERT-----
+/// MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+/// dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+/// 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+/// AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+/// DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+/// TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+/// ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+/// -----END INTERMEDIATE CERT-----
+///
+/// -----BEGIN CERTIFICATE-----
+/// MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+/// dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+/// 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+/// AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+/// DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+/// TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+/// ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+/// -----END CERTIFICATE-----
+/// ";
+///  let SAMPLE_STRING: Vec<u8> = SAMPLE.into();
+///
+///  let pems = parse_many(SAMPLE_STRING);
+///  assert_eq!(pems.len(), 2);
+///  assert_eq!(pems[0].tag, "INTERMEDIATE CERT");
+///  assert_eq!(pems[1].tag, "CERTIFICATE");
+/// ```
 pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Vec<Pem> {
     // Each time our regex matches a PEM section, we need to decode it.
     ASCII_ARMOR.captures_iter(&input.as_ref())
@@ -179,7 +289,18 @@ pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Vec<Pem> {
         .collect()
 }
 
-/// Encode a Pem struct into a Pem-encoded data string
+/// Encode a PEM struct into a PEM-encoded data string
+///
+/// # Example
+/// ```rust
+///  use pem::{Pem, encode};
+///
+///  let pem = Pem {
+///     tag: String::from("FOO"),
+///     contents: vec![1, 2, 3, 4],
+///   };
+///   encode(&pem);
+/// ```
 pub fn encode(pem: &Pem) -> String {
     let mut output = String::new();
 
@@ -198,7 +319,24 @@ pub fn encode(pem: &Pem) -> String {
     output
 }
 
-/// Encode multiple Pem structs into a set of Pem-encoded data strings
+/// Encode multiple PEM structs into a PEM-encoded data string
+///
+/// # Example
+/// ```rust
+///  use pem::{Pem, encode_many};
+///
+///  let data = vec![
+///     Pem {
+///         tag: String::from("FOO"),
+///         contents: vec![1, 2, 3, 4],
+///     },
+///     Pem {
+///         tag: String::from("BAR"),
+///         contents: vec![5, 6, 7, 8],
+///     },
+///   ];
+///   encode_many(&data);
+/// ```
 pub fn encode_many(pems: &[Pem]) -> String {
     pems.iter().map(encode).collect::<Vec<String>>().join("\r\n")
 }

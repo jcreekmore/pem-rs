@@ -1,14 +1,14 @@
 [package]
-name = "pem"
-version = "0.2.0"
 authors = ["Jonathan Creekmore <jonathan@thecreekmores.org>"]
-repository = "https://github.com/jcreekmore/pem-rs.git"
+description = "Parse and encode PEM-encoded data."
+documentation = "http://jcreekmore.github.io/pem-rs/"
 homepage = "https://github.com/jcreekmore/pem-rs.git"
 license = "MIT"
+name = "pem"
 readme = "README.md"
-documentation = "http://jcreekmore.github.io/pem-rs/"
-description = "Parse and encode PEM-encoded data."
+repository = "https://github.com/jcreekmore/pem-rs.git"
+version = "0.2.0"
 
 [dependencies]
-rustc-serialize = "0.3"
 regex = "0.1"
+rustc-serialize = "0.3"

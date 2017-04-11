@@ -4,6 +4,8 @@ rust:
 - nightly
 - beta
 - stable
+# Oldest supported version as dependency
+- 1.10.0
 matrix:
   allow_failures:
   - rust: nightly

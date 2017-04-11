@@ -101,6 +101,8 @@
 
 #[macro_use]
 extern crate error_chain;
+#[macro_use]
+extern crate lazy_static;
 extern crate rustc_serialize;
 extern crate regex;
 
@@ -110,8 +112,12 @@ pub use errors::*;
 use regex::{Captures, Regex};
 use rustc_serialize::base64::{Config, FromBase64, STANDARD, ToBase64};
 
-const PEM_SECTION: &'static str =
+const REGEX_STR: &'static str =
     r"(?s)-----BEGIN (?P<begin>.*?)-----\s*(?P<data>.*?)-----END (?P<end>.*?)-----\s*";
+
+lazy_static! {
+    static ref ASCII_ARMOR: Regex = Regex::new(REGEX_STR).unwrap();
+}
 
 /// A representation of Pem-encoded data
 #[derive(PartialEq,Debug)]
@@ -152,20 +158,15 @@ fn parse_helper(caps: Captures) -> Result<Pem> {
 
 /// Parses a single Pem-encoded data from a string.
 pub fn parse(input: &str) -> Result<Pem> {
-    let re = Regex::new(PEM_SECTION).unwrap();
-
-    re.captures(input)
+    ASCII_ARMOR.captures(input)
         .ok_or_else(|| ErrorKind::MalformedFraming.into())
         .and_then(parse_helper)
 }
 
 /// Parses a set of Pem-encoded data from a string.
 pub fn parse_many(input: &str) -> Vec<Pem> {
-    // Create the PEM section regex
-    let re = Regex::new(PEM_SECTION).unwrap();
-
     // Each time our regex matches a PEM section, we need to decode it.
-    re.captures_iter(input)
+    ASCII_ARMOR.captures_iter(input)
         .filter_map(|caps| parse_helper(caps).ok())
         .collect()
 }

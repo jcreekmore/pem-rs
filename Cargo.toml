@@ -11,5 +11,6 @@ version = "0.2.0"
 
 [dependencies]
 error-chain = "0.10.0"
+lazy_static = "0.2.6"
 regex = "0.1"
 rustc-serialize = "0.3"

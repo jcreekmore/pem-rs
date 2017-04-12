@@ -14,7 +14,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-pem = "0.2"
+pem = "0.3"
 ```
 
 and this to your crate root:

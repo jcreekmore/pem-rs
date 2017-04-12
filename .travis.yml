@@ -1,12 +1,10 @@
 sudo: false
 language: rust
 rust:
-- nightly
 - beta
 - stable
-matrix:
-  allow_failures:
-  - rust: nightly
+# Oldest supported version as dependency
+- 1.13.0
 before_script:
 - |
   pip install 'travis-cargo<0.2' --user &&
@@ -23,8 +21,6 @@ addons:
     - libcurl4-openssl-dev
     - libelf-dev
     - libdw-dev
-after_success:
-- travis-cargo --only stable doc-upload
 notifications:
   email:
     on_success: never

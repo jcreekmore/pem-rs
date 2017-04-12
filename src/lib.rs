@@ -1,4 +1,4 @@
-// Copyright 2016 Jonathan Creekmore
+// Copyright 2016-2017 Jonathan Creekmore
 //
 // Licensed under the MIT license <LICENSE.md or
 // http://opensource.org/licenses/MIT>. This file may not be
@@ -19,7 +19,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! pem = "0.1"
+//! pem = "0.3"
 //! ```
 //!
 //! and this to your crate root:
@@ -90,6 +90,8 @@
 //!  assert_eq!(pems[1].tag, "CERTIFICATE");
 //! ```
 
+#![recursion_limit = "1024"]
+
 #![deny(missing_docs,
         missing_debug_implementations, missing_copy_implementations,
         trivial_casts, trivial_numeric_casts,
@@ -97,34 +99,24 @@
         unstable_features,
         unused_import_braces, unused_qualifications)]
 
+#[macro_use]
+extern crate error_chain;
+#[macro_use]
+extern crate lazy_static;
 extern crate rustc_serialize;
 extern crate regex;
 
-use rustc_serialize::base64::{Config, FromBase64, STANDARD, ToBase64};
-use regex::{Captures, Regex};
+pub mod errors;
+pub use errors::*;
 
-const PEM_SECTION: &'static str =
+use regex::bytes::{Captures, Regex};
+use rustc_serialize::base64::{Config, FromBase64, STANDARD, ToBase64};
+
+const REGEX_STR: &'static str =
     r"(?s)-----BEGIN (?P<begin>.*?)-----\s*(?P<data>.*?)-----END (?P<end>.*?)-----\s*";
 
-/// An error that occurred during parsing Pem-encoded data
-#[derive(PartialEq,Clone,Copy,Debug)]
-pub enum Error {
-    /// PEM-encoded data is not framed correctly
-    PemFraming,
-    /// Invalid beginning tag
-    InvalidBeginTag,
-    /// Invalid ending tag
-    InvalidEndTag,
-    /// Mismatched beginning and ending tags
-    MismatchedTags,
-    /// Invalid base64-encoded data section
-    InvalidData,
-    /// Hints that destructuring should not be exhaustive.
-    ///
-    /// This enum may grow additional variants, so this makes
-    /// sure that clients don't count on exhaustive matching.
-    #[doc(hidden)]
-    __Nonexhaustive,
+lazy_static! {
+    static ref ASCII_ARMOR: Regex = Regex::new(REGEX_STR).unwrap();
 }
 
 /// A representation of Pem-encoded data
@@ -136,66 +128,179 @@ pub struct Pem {
     pub contents: Vec<u8>,
 }
 
-fn parse_helper(caps: Captures) -> Result<Pem, Error> {
-    // Verify that the begin section exists
-    let tag = caps.name("begin").unwrap();
-    if tag == "" {
-        return Err(Error::InvalidBeginTag);
-    }
-
-    // as well as the end section
-    let tag_end = caps.name("end").unwrap();
-    if tag_end == "" {
-        return Err(Error::InvalidEndTag);
-    }
-
-    // The beginning and the end sections must match
-    if tag != tag_end {
-        return Err(Error::MismatchedTags);
-    }
-
-    // If they did, then we can grab the data section
-    let data = caps.name("data").unwrap();
-
-    // Replace whitespace
-    let data = data.replace("\n", "").replace(" ", "");
-
-    // And decode it from Base64 into a vector of u8
-    let contents = match data.from_base64() {
-        Ok(c) => c,
-        Err(_) => {
-            return Err(Error::InvalidData);
+impl Pem {
+    fn new_from_captures(caps: Captures) -> Result<Pem> {
+        fn as_utf8<'a>(bytes: &'a [u8]) -> Result<&'a str> {
+            std::str::from_utf8(bytes).map_err(|e| ErrorKind::NotUtf8(e).into())
         }
-    };
 
-    Ok(Pem {
-        tag: tag.to_owned(),
-        contents: contents,
-    })
-}
+        // Verify that the begin section exists
+        let tag =
+            as_utf8(caps.name("begin").ok_or_else(|| ErrorKind::MissingBeginTag)?.as_bytes())?;
+        ensure!(!tag.is_empty(), ErrorKind::MissingBeginTag);
 
-/// Parses a single Pem-encoded data from a string.
-pub fn parse(input: &str) -> Result<Pem, Error> {
-    let re = Regex::new(PEM_SECTION).unwrap();
+        // as well as the end section
+        let tag_end =
+            as_utf8(caps.name("end").ok_or_else(|| ErrorKind::MissingEndTag)?.as_bytes())?;
+        ensure!(!tag_end.is_empty(), ErrorKind::MissingEndTag);
 
-    match re.captures(input) {
-        Some(caps) => parse_helper(caps),
-        None => Err(Error::PemFraming),
+        // The beginning and the end sections must match
+        ensure!(tag == tag_end,
+                ErrorKind::MismatchedTags(tag.into(), tag_end.into()));
+
+        // If they did, then we can grab the data section
+        let data = as_utf8(caps.name("data").ok_or_else(|| ErrorKind::MissingData)?.as_bytes())?;
+
+        // Replace whitespace
+        let data = data.replace("\n", "").replace(" ", "");
+
+        // And decode it from Base64 into a vector of u8
+        let contents = try!(data.from_base64().map_err(ErrorKind::InvalidData));
+
+        Ok(Pem {
+            tag: tag.to_owned(),
+            contents: contents,
+        })
     }
 }
 
-/// Parses a set of Pem-encoded data from a string.
-pub fn parse_many(input: &str) -> Vec<Pem> {
-    // Create the PEM section regex
-    let re = Regex::new(PEM_SECTION).unwrap();
-
-    // Each time our regex matches a PEM section, we need to decode it.
-    re.captures_iter(input)
-      .filter_map(|caps| parse_helper(caps).ok())
-      .collect()
+/// Parses a single PEM-encoded data from a data-type that can be dereferenced as a [u8].
+///
+/// # Example: parse PEM-encoded data from a Vec<u8>
+/// ```rust
+///
+/// use pem::parse;
+///
+/// const SAMPLE: &'static str = "-----BEGIN RSA PRIVATE KEY-----
+/// MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+/// dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+/// 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+/// AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+/// DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+/// TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+/// ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+/// -----END RSA PRIVATE KEY-----
+/// ";
+/// let SAMPLE_BYTES: Vec<u8> = SAMPLE.into();
+///
+///  let pem = parse(SAMPLE_BYTES).unwrap();
+///  assert_eq!(pem.tag, "RSA PRIVATE KEY");
+/// ```
+///
+/// # Example: parse PEM-encoded data from a String
+/// ```rust
+///
+/// use pem::parse;
+///
+/// const SAMPLE: &'static str = "-----BEGIN RSA PRIVATE KEY-----
+/// MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+/// dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+/// 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+/// AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+/// DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+/// TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+/// ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+/// -----END RSA PRIVATE KEY-----
+/// ";
+/// let SAMPLE_STRING: String = SAMPLE.into();
+///
+///  let pem = parse(SAMPLE_STRING).unwrap();
+///  assert_eq!(pem.tag, "RSA PRIVATE KEY");
+/// ```
+pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
+    ASCII_ARMOR.captures(&input.as_ref())
+        .ok_or_else(|| ErrorKind::MalformedFraming.into())
+        .and_then(Pem::new_from_captures)
 }
 
-/// Encode a Pem struct into a Pem-encoded data string
+/// Parses a set of PEM-encoded data from a data-type that can be dereferenced as a [u8].
+///
+/// # Example: parse a set of PEM-encoded data from a Vec<u8>
+///
+/// ```rust
+///
+/// use pem::parse_many;
+///
+/// const SAMPLE: &'static str = "-----BEGIN INTERMEDIATE CERT-----
+/// MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+/// dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+/// 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+/// AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+/// DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+/// TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+/// ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+/// -----END INTERMEDIATE CERT-----
+///
+/// -----BEGIN CERTIFICATE-----
+/// MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+/// dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+/// 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+/// AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+/// DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+/// TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+/// ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+/// -----END CERTIFICATE-----
+/// ";
+/// let SAMPLE_BYTES: Vec<u8> = SAMPLE.into();
+///
+///  let pems = parse_many(SAMPLE_BYTES);
+///  assert_eq!(pems.len(), 2);
+///  assert_eq!(pems[0].tag, "INTERMEDIATE CERT");
+///  assert_eq!(pems[1].tag, "CERTIFICATE");
+/// ```
+///
+/// # Example: parse a set of PEM-encoded data from a String
+///
+/// ```rust
+///
+/// use pem::parse_many;
+///
+/// const SAMPLE: &'static str = "-----BEGIN INTERMEDIATE CERT-----
+/// MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+/// dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+/// 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+/// AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+/// DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+/// TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+/// ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+/// -----END INTERMEDIATE CERT-----
+///
+/// -----BEGIN CERTIFICATE-----
+/// MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+/// dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+/// 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+/// AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+/// DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+/// TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+/// ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+/// -----END CERTIFICATE-----
+/// ";
+///  let SAMPLE_STRING: Vec<u8> = SAMPLE.into();
+///
+///  let pems = parse_many(SAMPLE_STRING);
+///  assert_eq!(pems.len(), 2);
+///  assert_eq!(pems[0].tag, "INTERMEDIATE CERT");
+///  assert_eq!(pems[1].tag, "CERTIFICATE");
+/// ```
+pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Vec<Pem> {
+    // Each time our regex matches a PEM section, we need to decode it.
+    ASCII_ARMOR.captures_iter(&input.as_ref())
+        .filter_map(|caps| Pem::new_from_captures(caps).ok())
+        .collect()
+}
+
+/// Encode a PEM struct into a PEM-encoded data string
+///
+/// # Example
+/// ```rust
+///  use pem::{Pem, encode};
+///
+///  let pem = Pem {
+///     tag: String::from("FOO"),
+///     contents: vec![1, 2, 3, 4],
+///   };
+///   encode(&pem);
+/// ```
 pub fn encode(pem: &Pem) -> String {
     let mut output = String::new();
 
@@ -214,13 +319,32 @@ pub fn encode(pem: &Pem) -> String {
     output
 }
 
-/// Encode multiple Pem structs into a set of Pem-encoded data strings
+/// Encode multiple PEM structs into a PEM-encoded data string
+///
+/// # Example
+/// ```rust
+///  use pem::{Pem, encode_many};
+///
+///  let data = vec![
+///     Pem {
+///         tag: String::from("FOO"),
+///         contents: vec![1, 2, 3, 4],
+///     },
+///     Pem {
+///         tag: String::from("BAR"),
+///         contents: vec![5, 6, 7, 8],
+///     },
+///   ];
+///   encode_many(&data);
+/// ```
 pub fn encode_many(pems: &[Pem]) -> String {
     pems.iter().map(encode).collect::<Vec<String>>().join("\r\n")
 }
 
 #[cfg(test)]
 mod test {
+    use super::*;
+
     const SAMPLE: &'static str = "-----BEGIN RSA PRIVATE KEY-----\r
 MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc\r
 dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO\r
@@ -243,23 +367,23 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg\r
 ";
 
     #[test]
-    fn parse_works() {
-        let pem = super::parse(SAMPLE).unwrap();
+    fn test_parse_works() {
+        let pem = parse(SAMPLE).unwrap();
         assert_eq!(pem.tag, "RSA PRIVATE KEY");
     }
 
     #[test]
-    fn parse_invalid_framing() {
+    fn test_parse_invalid_framing() {
         let input = "--BEGIN data-----
         -----END data-----";
-        match super::parse(&input) {
-            Ok(_) => assert!(false),
-            Err(code) => assert_eq!(code, super::Error::PemFraming),
+        match parse(&input) {
+            Err(Error(ErrorKind::MalformedFraming, _)) => assert!(true),
+            _ => assert!(false),
         }
     }
 
     #[test]
-    fn parse_invalid_begin() {
+    fn test_parse_invalid_begin() {
         let input = "-----BEGIN -----
 MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oYo
 QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0
@@ -269,14 +393,14 @@ ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
 /+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
 RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 -----END RSA PUBLIC KEY-----";
-        match super::parse(&input) {
-            Ok(_) => assert!(false),
-            Err(code) => assert_eq!(code, super::Error::InvalidBeginTag),
+        match parse(&input) {
+            Err(Error(ErrorKind::MissingBeginTag, _)) => assert!(true),
+            _ => assert!(false),
         }
     }
 
     #[test]
-    fn parse_invalid_end() {
+    fn test_parse_invalid_end() {
         let input = "-----BEGIN DATA-----
 MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oYo
 QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0
@@ -286,14 +410,14 @@ ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
 /+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
 RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 -----END -----";
-        match super::parse(&input) {
-            Ok(_) => assert!(false),
-            Err(code) => assert_eq!(code, super::Error::InvalidEndTag),
+        match parse(&input) {
+            Err(Error(ErrorKind::MissingEndTag, _)) => assert!(true),
+            _ => assert!(false),
         }
     }
 
     #[test]
-    fn parse_invalid_data() {
+    fn test_parse_invalid_data() {
         let input = "-----BEGIN DATA-----
 MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oY?
 QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0
@@ -303,58 +427,58 @@ ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
 /+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
 RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 -----END DATA-----";
-        match super::parse(&input) {
-            Ok(_) => assert!(false),
-            Err(code) => assert_eq!(code, super::Error::InvalidData),
+        match parse(&input) {
+            Err(Error(ErrorKind::InvalidData(_), _)) => assert!(true),
+            _ => assert!(false),
         }
     }
 
     #[test]
-    fn parse_empty_data() {
+    fn test_parse_empty_data() {
         let input = "-----BEGIN DATA-----
 -----END DATA-----";
-        let pem = super::parse(&input).unwrap();
+        let pem = parse(&input).unwrap();
         assert_eq!(pem.contents.len(), 0);
     }
 
     #[test]
-    fn parse_many_works() {
-        let pems = super::parse_many(SAMPLE);
+    fn test_parse_many_works() {
+        let pems = parse_many(SAMPLE);
         assert_eq!(pems.len(), 2);
         assert_eq!(pems[0].tag, "RSA PRIVATE KEY");
         assert_eq!(pems[1].tag, "RSA PUBLIC KEY");
     }
 
     #[test]
-    fn encode_empty_contents() {
-        let pem = super::Pem {
+    fn test_encode_empty_contents() {
+        let pem = Pem {
             tag: String::from("FOO"),
             contents: vec![],
         };
-        let encoded = super::encode(&pem);
+        let encoded = encode(&pem);
         assert!(encoded != "");
 
-        let pem_out = super::parse(&encoded).unwrap();
+        let pem_out = parse(&encoded).unwrap();
         assert_eq!(&pem, &pem_out);
     }
 
     #[test]
-    fn encode_contents() {
-        let pem = super::Pem {
+    fn test_encode_contents() {
+        let pem = Pem {
             tag: String::from("FOO"),
             contents: vec![1, 2, 3, 4],
         };
-        let encoded = super::encode(&pem);
+        let encoded = encode(&pem);
         assert!(encoded != "");
 
-        let pem_out = super::parse(&encoded).unwrap();
+        let pem_out = parse(&encoded).unwrap();
         assert_eq!(&pem, &pem_out);
     }
 
     #[test]
-    fn encode_many() {
-        let pems = super::parse_many(SAMPLE);
-        let encoded = super::encode_many(&pems);
+    fn test_encode_many() {
+        let pems = parse_many(SAMPLE);
+        let encoded = encode_many(&pems);
 
         assert_eq!(SAMPLE, encoded);
     }

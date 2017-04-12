@@ -1,14 +1,19 @@
 [package]
-name = "pem"
-version = "0.2.0"
 authors = ["Jonathan Creekmore <jonathan@thecreekmores.org>"]
-repository = "https://github.com/jcreekmore/pem-rs.git"
+description = "Parse and encode PEM-encoded data."
+documentation = "https://docs.rs/pem/"
 homepage = "https://github.com/jcreekmore/pem-rs.git"
 license = "MIT"
+name = "pem"
 readme = "README.md"
-documentation = "http://jcreekmore.github.io/pem-rs/"
-description = "Parse and encode PEM-encoded data."
+repository = "https://github.com/jcreekmore/pem-rs.git"
+version = "0.3.0"
+
+[badges]
+travis-ci = { repository = "jcreekmore/pem-rs" }
 
 [dependencies]
+error-chain = "0.10.0"
+lazy_static = "0.2.6"
+regex = "0.2"
 rustc-serialize = "0.3"
-regex = "0.1"

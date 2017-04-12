@@ -1,7 +1,7 @@
 [package]
 authors = ["Jonathan Creekmore <jonathan@thecreekmores.org>"]
 description = "Parse and encode PEM-encoded data."
-documentation = "http://jcreekmore.github.io/pem-rs/"
+documentation = "https://docs.rs/pem/"
 homepage = "https://github.com/jcreekmore/pem-rs.git"
 license = "MIT"
 name = "pem"

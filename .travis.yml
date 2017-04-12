@@ -21,8 +21,6 @@ addons:
     - libcurl4-openssl-dev
     - libelf-dev
     - libdw-dev
-after_success:
-- travis-cargo --only stable doc-upload
 notifications:
   email:
     on_success: never

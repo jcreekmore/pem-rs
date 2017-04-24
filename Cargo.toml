@@ -9,11 +9,8 @@ readme = "README.md"
 repository = "https://github.com/jcreekmore/pem-rs.git"
 version = "0.3.0"
 
-[badges]
-travis-ci = { repository = "jcreekmore/pem-rs" }
-
 [dependencies]
+base64 = "0.5.0"
 error-chain = "0.10.0"
 lazy_static = "0.2.6"
 regex = "0.2"
-rustc-serialize = "0.3"

@@ -7,7 +7,7 @@
 #![allow(missing_docs)]
 error_chain! {
     foreign_links {
-        InvalidData(::rustc_serialize::base64::FromBase64Error);
+        InvalidData(::base64::DecodeError);
         NotUtf8(::std::str::Utf8Error);
     }
     errors {

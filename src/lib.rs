@@ -19,7 +19,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! pem = "0.3"
+//! pem = "0.4"
 //! ```
 //!
 //! and this to your crate root:
@@ -99,18 +99,17 @@
         unstable_features,
         unused_import_braces, unused_qualifications)]
 
+extern crate base64;
 #[macro_use]
 extern crate error_chain;
 #[macro_use]
 extern crate lazy_static;
-extern crate rustc_serialize;
 extern crate regex;
 
 pub mod errors;
 pub use errors::*;
 
 use regex::bytes::{Captures, Regex};
-use rustc_serialize::base64::{Config, FromBase64, STANDARD, ToBase64};
 
 const REGEX_STR: &'static str =
     r"(?s)-----BEGIN (?P<begin>.*?)-----\s*(?P<data>.*?)-----END (?P<end>.*?)-----\s*";
@@ -135,13 +134,15 @@ impl Pem {
         }
 
         // Verify that the begin section exists
-        let tag =
-            as_utf8(caps.name("begin").ok_or_else(|| ErrorKind::MissingBeginTag)?.as_bytes())?;
+        let tag = as_utf8(caps.name("begin")
+                              .ok_or_else(|| ErrorKind::MissingBeginTag)?
+                              .as_bytes())?;
         ensure!(!tag.is_empty(), ErrorKind::MissingBeginTag);
 
         // as well as the end section
-        let tag_end =
-            as_utf8(caps.name("end").ok_or_else(|| ErrorKind::MissingEndTag)?.as_bytes())?;
+        let tag_end = as_utf8(caps.name("end")
+                                  .ok_or_else(|| ErrorKind::MissingEndTag)?
+                                  .as_bytes())?;
         ensure!(!tag_end.is_empty(), ErrorKind::MissingEndTag);
 
         // The beginning and the end sections must match
@@ -149,18 +150,18 @@ impl Pem {
                 ErrorKind::MismatchedTags(tag.into(), tag_end.into()));
 
         // If they did, then we can grab the data section
-        let data = as_utf8(caps.name("data").ok_or_else(|| ErrorKind::MissingData)?.as_bytes())?;
-
-        // Replace whitespace
-        let data = data.replace("\n", "").replace(" ", "");
+        let data = as_utf8(caps.name("data")
+                               .ok_or_else(|| ErrorKind::MissingData)?
+                               .as_bytes())?;
 
         // And decode it from Base64 into a vector of u8
-        let contents = try!(data.from_base64().map_err(ErrorKind::InvalidData));
+        let contents = try!(base64::decode_config(&data, base64::MIME)
+                                .map_err(ErrorKind::InvalidData));
 
         Ok(Pem {
-            tag: tag.to_owned(),
-            contents: contents,
-        })
+               tag: tag.to_owned(),
+               contents: contents,
+           })
     }
 }
 
@@ -309,7 +310,12 @@ pub fn encode(pem: &Pem) -> String {
     if pem.contents.is_empty() {
         contents = String::from("");
     } else {
-        contents = pem.contents.to_base64(Config { line_length: Some(62), ..STANDARD });
+        contents = base64::encode_config(&pem.contents, base64::Config::new(
+            base64::CharacterSet::Standard,
+            true,
+            true,
+            base64::LineWrap::Wrap(64, base64::LineEnding::CRLF)
+        ));
     }
 
     output.push_str(&format!("-----BEGIN {}-----\r\n", pem.tag));
@@ -338,7 +344,10 @@ pub fn encode(pem: &Pem) -> String {
 ///   encode_many(&data);
 /// ```
 pub fn encode_many(pems: &[Pem]) -> String {
-    pems.iter().map(encode).collect::<Vec<String>>().join("\r\n")
+    pems.iter()
+        .map(encode)
+        .collect::<Vec<String>>()
+        .join("\r\n")
 }
 
 #[cfg(test)]

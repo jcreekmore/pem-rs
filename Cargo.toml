@@ -10,7 +10,7 @@ repository = "https://github.com/jcreekmore/pem-rs.git"
 version = "0.4.1-pre"
 
 [dependencies]
-base64 = "0.5.0"
+base64 = "0.6.0"
 error-chain = "0.10.0"
 lazy_static = "0.2.6"
 regex = "0.2"

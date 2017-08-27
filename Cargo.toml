@@ -8,6 +8,7 @@ name = "pem"
 readme = "README.md"
 repository = "https://github.com/jcreekmore/pem-rs.git"
 version = "0.4.1-pre"
+categories = [ "cryptography" ]
 
 [dependencies]
 base64 = "0.6.0"

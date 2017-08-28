@@ -15,3 +15,6 @@ base64 = "0.6.0"
 error-chain = "0.10.0"
 lazy_static = "0.2.6"
 regex = "0.2"
+
+[badges]
+travis-ci = { repository = "jcreekmore/pem-rs" }

@@ -7,7 +7,7 @@ license = "MIT"
 name = "pem"
 readme = "README.md"
 repository = "https://github.com/jcreekmore/pem-rs.git"
-version = "0.4.1-pre"
+version = "0.4.1"
 categories = [ "cryptography" ]
 
 [dependencies]

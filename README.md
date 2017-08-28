@@ -6,7 +6,7 @@ A Rust library for parsing and encoding PEM-encoded data.
 [![Build Status](https://travis-ci.org/jcreekmore/pem-rs.svg?branch=master)](https://travis-ci.org/jcreekmore/pem-rs)
 
 ### Documentation
-[Module documentation with examples](http://jcreekmore.github.io/pem-rs/pem/index.html)
+[Module documentation with examples](https://docs.rs/pem/)
 
 ### Usage
 
@@ -14,7 +14,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-pem = "0.3"
+pem = "0.4"
 ```
 
 and this to your crate root:
@@ -40,7 +40,7 @@ TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
 ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
 -----END RSA PRIVATE KEY-----
 
-let pem = parse(SAMPLE).unwrap();
+let pem = parse(SAMPLE)?;
 println!("PEM tag: {}", pem.tag);
 
 ```

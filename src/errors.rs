@@ -4,20 +4,22 @@
 // http://opensource.org/licenses/MIT>. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-#![allow(missing_docs)]
-error_chain! {
-    foreign_links {
-        InvalidData(::base64::DecodeError);
-        NotUtf8(::std::str::Utf8Error);
-    }
-    errors {
-        MalformedFraming
-        MissingBeginTag
-        MissingEndTag
-        MissingData
-        MismatchedTags(b: String, e: String) {
-            description("mismatching BEGIN and END tags")
-            display("mismatching BEGIN (\"{}\") and END (\"{}\") tags", b, e)
-        }
-    }
+/// The `pem` error type.
+#[derive(Fail, Debug, Eq, PartialEq)]
+#[allow(missing_docs)]
+pub enum PemError {
+    #[fail(display = "mismatching BEGIN (\"{}\") and END (\"{}\") tags", _0, _1)]
+    MismatchedTags(String, String),
+    #[fail(display = "malformed framing")]
+    MalformedFraming,
+    #[fail(display = "missing BEGIN tag")]
+    MissingBeginTag,
+    #[fail(display = "missing END tag")]
+    MissingEndTag,
+    #[fail(display = "missing data")]
+    MissingData,
+    #[fail(display = "invalid data: {}", _0)]
+    InvalidData(#[fail(cause)] ::base64::DecodeError),
+    #[fail(display = "invalid utf-8 value: {}", _0)]
+    NotUtf8(#[fail(cause)] ::std::str::Utf8Error),
 }

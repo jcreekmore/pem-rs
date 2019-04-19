@@ -3,8 +3,6 @@ language: rust
 rust:
 - beta
 - stable
-# Oldest supported version as dependency
-- 1.26.2
 before_script:
 - |
   pip install 'travis-cargo<0.2' --user &&

@@ -4,7 +4,6 @@ extern crate pem;
 
 use criterion::Criterion;
 
-
 const SAMPLE: &'static str = "-----BEGIN RSA PRIVATE KEY-----\r
 MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc\r
 dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO\r

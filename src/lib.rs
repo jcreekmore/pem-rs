@@ -99,17 +99,20 @@
         unstable_features,
         unused_import_braces, unused_qualifications)]
 
-extern crate base64;
 #[macro_use]
-extern crate error_chain;
+extern crate failure;
+extern crate base64;
 #[macro_use]
 extern crate lazy_static;
 extern crate regex;
 
-pub mod errors;
-pub use errors::*;
+mod errors;
 
+pub use errors::PemError;
 use regex::bytes::{Captures, Regex};
+
+/// The `pem` result type.
+pub type Result<T> = ::std::result::Result<T, PemError>;
 
 const REGEX_STR: &'static str =
     r"(?s)-----BEGIN (?P<begin>.*?)-----\s*(?P<data>.*?)-----END (?P<end>.*?)-----\s*";
@@ -130,33 +133,38 @@ pub struct Pem {
 impl Pem {
     fn new_from_captures(caps: Captures) -> Result<Pem> {
         fn as_utf8<'a>(bytes: &'a [u8]) -> Result<&'a str> {
-            std::str::from_utf8(bytes).map_err(|e| ErrorKind::NotUtf8(e).into())
+            Ok(std::str::from_utf8(bytes).map_err(PemError::NotUtf8)?)
         }
 
         // Verify that the begin section exists
         let tag = as_utf8(caps.name("begin")
-                              .ok_or_else(|| ErrorKind::MissingBeginTag)?
+                              .ok_or_else(|| PemError::MissingBeginTag)?
                               .as_bytes())?;
-        ensure!(!tag.is_empty(), ErrorKind::MissingBeginTag);
+        if tag.is_empty() {
+            return Err(PemError::MissingBeginTag);
+        }
 
         // as well as the end section
         let tag_end = as_utf8(caps.name("end")
-                                  .ok_or_else(|| ErrorKind::MissingEndTag)?
+                                  .ok_or_else(|| PemError::MissingEndTag)?
                                   .as_bytes())?;
-        ensure!(!tag_end.is_empty(), ErrorKind::MissingEndTag);
+        if tag_end.is_empty() {
+            return Err(PemError::MissingEndTag);
+        }
 
         // The beginning and the end sections must match
-        ensure!(tag == tag_end,
-                ErrorKind::MismatchedTags(tag.into(), tag_end.into()));
+        if tag != tag_end {
+            return Err(PemError::MismatchedTags(tag.into(), tag_end.into()));
+        }
 
         // If they did, then we can grab the data section
         let data = as_utf8(caps.name("data")
-                               .ok_or_else(|| ErrorKind::MissingData)?
+                               .ok_or_else(|| PemError::MissingData)?
                                .as_bytes())?;
 
         // And decode it from Base64 into a vector of u8
-        let contents = try!(base64::decode_config(&data, base64::MIME)
-                                .map_err(ErrorKind::InvalidData));
+        let contents = base64::decode_config(&data, base64::MIME)
+                           .map_err(PemError::InvalidData)?;
 
         Ok(Pem {
                tag: tag.to_owned(),
@@ -210,7 +218,7 @@ impl Pem {
 /// ```
 pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
     ASCII_ARMOR.captures(&input.as_ref())
-        .ok_or_else(|| ErrorKind::MalformedFraming.into())
+        .ok_or_else(|| PemError::MalformedFraming.into())
         .and_then(Pem::new_from_captures)
 }
 
@@ -353,6 +361,7 @@ pub fn encode_many(pems: &[Pem]) -> String {
 #[cfg(test)]
 mod test {
     use super::*;
+    use failure::Fail;
 
     const SAMPLE: &'static str = "-----BEGIN RSA PRIVATE KEY-----\r
 MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc\r
@@ -385,10 +394,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg\r
     fn test_parse_invalid_framing() {
         let input = "--BEGIN data-----
         -----END data-----";
-        match parse(&input) {
-            Err(Error(ErrorKind::MalformedFraming, _)) => assert!(true),
-            _ => assert!(false),
-        }
+        assert_eq!(parse(&input), Err(PemError::MalformedFraming));
     }
 
     #[test]
@@ -402,10 +408,7 @@ ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
 /+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
 RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 -----END RSA PUBLIC KEY-----";
-        match parse(&input) {
-            Err(Error(ErrorKind::MissingBeginTag, _)) => assert!(true),
-            _ => assert!(false),
-        }
+        assert_eq!(parse(&input), Err(PemError::MissingBeginTag));
     }
 
     #[test]
@@ -419,10 +422,7 @@ ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
 /+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
 RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 -----END -----";
-        match parse(&input) {
-            Err(Error(ErrorKind::MissingEndTag, _)) => assert!(true),
-            _ => assert!(false),
-        }
+        assert_eq!(parse(&input), Err(PemError::MissingEndTag));
     }
 
     #[test]
@@ -437,7 +437,12 @@ ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
 RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 -----END DATA-----";
         match parse(&input) {
-            Err(Error(ErrorKind::InvalidData(_), _)) => assert!(true),
+            Err(e @ PemError::InvalidData(_)) => {
+                assert_eq!(
+                    &format!("{}", e.cause().unwrap()),
+                    "Invalid byte 63, offset 63."
+                );
+            }
             _ => assert!(false),
         }
     }

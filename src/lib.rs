@@ -121,8 +121,24 @@ lazy_static! {
     static ref ASCII_ARMOR: Regex = Regex::new(REGEX_STR).unwrap();
 }
 
+/// Enum describing line endings
+#[derive(Debug, Clone, Copy)]
+pub enum LineEnding {
+    /// Windows-like (`\r\n`)
+    CRLF,
+    /// Unix-like (`\n`)
+    LF,
+}
+
+/// Configuration for Pem encoding
+#[derive(Debug, Clone, Copy)]
+pub struct EncodeConfig {
+    /// Line ending to use during encoding
+    pub line_ending: LineEnding,
+}
+
 /// A representation of Pem-encoded data
-#[derive(PartialEq,Debug)]
+#[derive(PartialEq, Debug)]
 pub struct Pem {
     /// The tag extracted from the Pem-encoded data
     pub tag: String,
@@ -311,6 +327,33 @@ pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Vec<Pem> {
 ///   encode(&pem);
 /// ```
 pub fn encode(pem: &Pem) -> String {
+    encode_config(
+        pem,
+        &EncodeConfig {
+            line_ending: LineEnding::CRLF,
+        },
+    )
+}
+
+/// Encode a PEM struct into a PEM-encoded data string with additional
+/// configuration options
+///
+/// # Example
+/// ```rust
+///  use pem::{Pem, encode_config, EncodeConfig, LineEnding};
+///
+///  let pem = Pem {
+///     tag: String::from("FOO"),
+///     contents: vec![1, 2, 3, 4],
+///   };
+///   encode_config(&pem, &EncodeConfig { line_ending: LineEnding::LF });
+/// ```
+pub fn encode_config(pem: &Pem, config: &EncodeConfig) -> String {
+    let (line_ending, base64_line_ending) = match config.line_ending {
+        LineEnding::CRLF => ("\r\n", base64::LineEnding::CRLF),
+        LineEnding::LF => ("\n", base64::LineEnding::LF),
+    };
+
     let mut output = String::new();
 
     let contents;
@@ -318,17 +361,20 @@ pub fn encode(pem: &Pem) -> String {
     if pem.contents.is_empty() {
         contents = String::from("");
     } else {
-        contents = base64::encode_config(&pem.contents, base64::Config::new(
-            base64::CharacterSet::Standard,
-            true,
-            true,
-            base64::LineWrap::Wrap(64, base64::LineEnding::CRLF)
-        ));
+        contents = base64::encode_config(
+            &pem.contents,
+            base64::Config::new(
+                base64::CharacterSet::Standard,
+                true,
+                true,
+                base64::LineWrap::Wrap(64, base64_line_ending),
+            ),
+        );
     }
 
-    output.push_str(&format!("-----BEGIN {}-----\r\n", pem.tag));
-    output.push_str(&format!("{}\r\n", contents));
-    output.push_str(&format!("-----END {}-----\r\n", pem.tag));
+    output.push_str(&format!("-----BEGIN {}-----{}", pem.tag, line_ending));
+    output.push_str(&format!("{}{}", contents, line_ending));
+    output.push_str(&format!("-----END {}-----{}", pem.tag, line_ending));
 
     output
 }
@@ -358,12 +404,44 @@ pub fn encode_many(pems: &[Pem]) -> String {
         .join("\r\n")
 }
 
+/// Encode multiple PEM structs into a PEM-encoded data string with additional
+/// configuration options
+///
+/// Same config will be used for each PEM struct.
+///
+/// # Example
+/// ```rust
+///  use pem::{Pem, encode_many_config, EncodeConfig, LineEnding};
+///
+///  let data = vec![
+///     Pem {
+///         tag: String::from("FOO"),
+///         contents: vec![1, 2, 3, 4],
+///     },
+///     Pem {
+///         tag: String::from("BAR"),
+///         contents: vec![5, 6, 7, 8],
+///     },
+///   ];
+///   encode_many_config(&data, &EncodeConfig { line_ending: LineEnding::LF });
+/// ```
+pub fn encode_many_config(pems: &[Pem], config: &EncodeConfig) -> String {
+    let line_ending = match config.line_ending {
+        LineEnding::CRLF => "\r\n",
+        LineEnding::LF => "\n",
+    };
+    pems.iter()
+        .map(|value| encode_config(value, config))
+        .collect::<Vec<String>>()
+        .join(line_ending)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use failure::Fail;
 
-    const SAMPLE: &'static str = "-----BEGIN RSA PRIVATE KEY-----\r
+    const SAMPLE_CRLF: &'static str = "-----BEGIN RSA PRIVATE KEY-----\r
 MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc\r
 dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO\r
 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei\r
@@ -384,9 +462,30 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg\r
 -----END RSA PUBLIC KEY-----\r
 ";
 
+    const SAMPLE_LF: &'static str = "-----BEGIN RSA PRIVATE KEY-----
+MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+-----END RSA PRIVATE KEY-----
+
+-----BEGIN RSA PUBLIC KEY-----
+MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oYo
+QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0
+RFI1MrnzRbCmOkM6tgVO0cd6r5Z4bDGLusH9yjI9iI84gPRjK0AzymXFmBGuREHI
+sQIhAPKf4pp+Prvutgq2ayygleZChBr1DC4XnnufBNtaswyvAiEAzNGVKgNvzuhk
+ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
+/+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
+RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
+-----END RSA PUBLIC KEY-----
+";
+
     #[test]
     fn test_parse_works() {
-        let pem = parse(SAMPLE).unwrap();
+        let pem = parse(SAMPLE_CRLF).unwrap();
         assert_eq!(pem.tag, "RSA PRIVATE KEY");
     }
 
@@ -457,7 +556,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 
     #[test]
     fn test_parse_many_works() {
-        let pems = parse_many(SAMPLE);
+        let pems = parse_many(SAMPLE_CRLF);
         assert_eq!(pems.len(), 2);
         assert_eq!(pems[0].tag, "RSA PRIVATE KEY");
         assert_eq!(pems[1].tag, "RSA PUBLIC KEY");
@@ -491,9 +590,36 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 
     #[test]
     fn test_encode_many() {
-        let pems = parse_many(SAMPLE);
+        let pems = parse_many(SAMPLE_CRLF);
         let encoded = encode_many(&pems);
 
-        assert_eq!(SAMPLE, encoded);
+        assert_eq!(SAMPLE_CRLF, encoded);
+    }
+
+    #[test]
+    fn test_encode_config_contents() {
+        let pem = Pem {
+            tag: String::from("FOO"),
+            contents: vec![1, 2, 3, 4],
+        };
+        let config = EncodeConfig {
+            line_ending: LineEnding::LF,
+        };
+        let encoded = encode_config(&pem, &config);
+        assert!(encoded != "");
+
+        let pem_out = parse(&encoded).unwrap();
+        assert_eq!(&pem, &pem_out);
+    }
+
+    #[test]
+    fn test_encode_many_config() {
+        let pems = parse_many(SAMPLE_LF);
+        let config = EncodeConfig {
+            line_ending: LineEnding::LF,
+        };
+        let encoded = encode_many_config(&pems, &config);
+
+        assert_eq!(SAMPLE_LF, encoded);
     }
 }

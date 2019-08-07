@@ -110,12 +110,16 @@ mod errors;
 
 pub use errors::PemError;
 use regex::bytes::{Captures, Regex};
+use std::str;
 
 /// The `pem` result type.
 pub type Result<T> = ::std::result::Result<T, PemError>;
 
 const REGEX_STR: &'static str =
     r"(?s)-----BEGIN (?P<begin>.*?)-----\s*(?P<data>.*?)-----END (?P<end>.*?)-----\s*";
+
+/// The line length for PEM encoding
+const LINE_WRAP: usize = 64;
 
 lazy_static! {
     static ref ASCII_ARMOR: Regex = Regex::new(REGEX_STR).unwrap();
@@ -149,7 +153,7 @@ pub struct Pem {
 impl Pem {
     fn new_from_captures(caps: Captures) -> Result<Pem> {
         fn as_utf8<'a>(bytes: &'a [u8]) -> Result<&'a str> {
-            Ok(std::str::from_utf8(bytes).map_err(PemError::NotUtf8)?)
+            Ok(str::from_utf8(bytes).map_err(PemError::NotUtf8)?)
         }
 
         // Verify that the begin section exists
@@ -174,12 +178,18 @@ impl Pem {
         }
 
         // If they did, then we can grab the data section
-        let data = as_utf8(caps.name("data")
+        let raw_data = as_utf8(caps.name("data")
                                .ok_or_else(|| PemError::MissingData)?
                                .as_bytes())?;
 
+        // We need to get rid of newlines for base64::decode
+        // As base64 requires an AsRef<[u8]>, this must involve a copy
+        let data : String = raw_data
+            .lines().map(str::trim_end)
+            .collect();
+
         // And decode it from Base64 into a vector of u8
-        let contents = base64::decode_config(&data, base64::MIME)
+        let contents = base64::decode_config(&data, base64::STANDARD)
                            .map_err(PemError::InvalidData)?;
 
         Ok(Pem {
@@ -349,9 +359,9 @@ pub fn encode(pem: &Pem) -> String {
 ///   encode_config(&pem, &EncodeConfig { line_ending: LineEnding::LF });
 /// ```
 pub fn encode_config(pem: &Pem, config: &EncodeConfig) -> String {
-    let (line_ending, base64_line_ending) = match config.line_ending {
-        LineEnding::CRLF => ("\r\n", base64::LineEnding::CRLF),
-        LineEnding::LF => ("\n", base64::LineEnding::LF),
+    let line_ending = match config.line_ending {
+        LineEnding::CRLF => "\r\n",
+        LineEnding::LF => "\n",
     };
 
     let mut output = String::new();
@@ -366,14 +376,16 @@ pub fn encode_config(pem: &Pem, config: &EncodeConfig) -> String {
             base64::Config::new(
                 base64::CharacterSet::Standard,
                 true,
-                true,
-                base64::LineWrap::Wrap(64, base64_line_ending),
             ),
         );
     }
 
     output.push_str(&format!("-----BEGIN {}-----{}", pem.tag, line_ending));
-    output.push_str(&format!("{}{}", contents, line_ending));
+    for c in contents.as_bytes().chunks(LINE_WRAP) {
+        output.push_str(&format!("{}{}",
+                                 str::from_utf8(c).unwrap(),
+                                 line_ending));
+    }
     output.push_str(&format!("-----END {}-----{}", pem.tag, line_ending));
 
     output

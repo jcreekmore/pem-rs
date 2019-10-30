@@ -99,21 +99,13 @@
         unstable_features,
         unused_import_braces, unused_qualifications)]
 
-#[macro_use]
-extern crate failure;
-extern crate base64;
-#[macro_use]
-extern crate lazy_static;
-extern crate regex;
 
 mod errors;
 
-pub use errors::PemError;
+pub use crate::errors::{PemError, Result};
 use regex::bytes::{Captures, Regex};
 use std::str;
-
-/// The `pem` result type.
-pub type Result<T> = ::std::result::Result<T, PemError>;
+use lazy_static::lazy_static;
 
 const REGEX_STR: &'static str =
     r"(?s)-----BEGIN (?P<begin>.*?)-----\s*(?P<data>.*?)-----END (?P<end>.*?)-----\s*";
@@ -451,7 +443,7 @@ pub fn encode_many_config(pems: &[Pem], config: &EncodeConfig) -> String {
 #[cfg(test)]
 mod test {
     use super::*;
-    use failure::Fail;
+    use std::error::Error;
 
     const SAMPLE_CRLF: &'static str = "-----BEGIN RSA PRIVATE KEY-----\r
 MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc\r
@@ -550,7 +542,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
         match parse(&input) {
             Err(e @ PemError::InvalidData(_)) => {
                 assert_eq!(
-                    &format!("{}", e.cause().unwrap()),
+                    &format!("{}", e.source().unwrap()),
                     "Invalid byte 63, offset 63."
                 );
             }

@@ -91,23 +91,26 @@
 //! ```
 
 #![recursion_limit = "1024"]
-
-#![deny(missing_docs,
-        missing_debug_implementations, missing_copy_implementations,
-        trivial_casts, trivial_numeric_casts,
-        unsafe_code,
-        unstable_features,
-        unused_import_braces, unused_qualifications)]
-
+#![deny(
+    missing_docs,
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+    unstable_features,
+    unused_import_braces,
+    unused_qualifications
+)]
 
 mod errors;
 
 pub use crate::errors::{PemError, Result};
+use lazy_static::lazy_static;
 use regex::bytes::{Captures, Regex};
 use std::str;
-use lazy_static::lazy_static;
 
-const REGEX_STR: &'static str =
+const REGEX_STR: &str =
     r"(?s)-----BEGIN (?P<begin>.*?)-----\s*(?P<data>.*?)-----END (?P<end>.*?)-----\s*";
 
 /// The line length for PEM encoding
@@ -149,17 +152,21 @@ impl Pem {
         }
 
         // Verify that the begin section exists
-        let tag = as_utf8(caps.name("begin")
-                              .ok_or_else(|| PemError::MissingBeginTag)?
-                              .as_bytes())?;
+        let tag = as_utf8(
+            caps.name("begin")
+                .ok_or_else(|| PemError::MissingBeginTag)?
+                .as_bytes(),
+        )?;
         if tag.is_empty() {
             return Err(PemError::MissingBeginTag);
         }
 
         // as well as the end section
-        let tag_end = as_utf8(caps.name("end")
-                                  .ok_or_else(|| PemError::MissingEndTag)?
-                                  .as_bytes())?;
+        let tag_end = as_utf8(
+            caps.name("end")
+                .ok_or_else(|| PemError::MissingEndTag)?
+                .as_bytes(),
+        )?;
         if tag_end.is_empty() {
             return Err(PemError::MissingEndTag);
         }
@@ -170,24 +177,24 @@ impl Pem {
         }
 
         // If they did, then we can grab the data section
-        let raw_data = as_utf8(caps.name("data")
-                               .ok_or_else(|| PemError::MissingData)?
-                               .as_bytes())?;
+        let raw_data = as_utf8(
+            caps.name("data")
+                .ok_or_else(|| PemError::MissingData)?
+                .as_bytes(),
+        )?;
 
         // We need to get rid of newlines for base64::decode
         // As base64 requires an AsRef<[u8]>, this must involve a copy
-        let data : String = raw_data
-            .lines().map(str::trim_end)
-            .collect();
+        let data: String = raw_data.lines().map(str::trim_end).collect();
 
         // And decode it from Base64 into a vector of u8
-        let contents = base64::decode_config(&data, base64::STANDARD)
-                           .map_err(PemError::InvalidData)?;
+        let contents =
+            base64::decode_config(&data, base64::STANDARD).map_err(PemError::InvalidData)?;
 
         Ok(Pem {
-               tag: tag.to_owned(),
-               contents: contents,
-           })
+            tag: tag.to_owned(),
+            contents,
+        })
     }
 }
 
@@ -235,8 +242,9 @@ impl Pem {
 ///  assert_eq!(pem.tag, "RSA PRIVATE KEY");
 /// ```
 pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
-    ASCII_ARMOR.captures(&input.as_ref())
-        .ok_or_else(|| PemError::MalformedFraming.into())
+    ASCII_ARMOR
+        .captures(&input.as_ref())
+        .ok_or_else(|| PemError::MalformedFraming)
         .and_then(Pem::new_from_captures)
 }
 
@@ -311,7 +319,8 @@ pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
 /// ```
 pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Vec<Pem> {
     // Each time our regex matches a PEM section, we need to decode it.
-    ASCII_ARMOR.captures_iter(&input.as_ref())
+    ASCII_ARMOR
+        .captures_iter(&input.as_ref())
         .filter_map(|caps| Pem::new_from_captures(caps).ok())
         .collect()
 }
@@ -331,7 +340,7 @@ pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Vec<Pem> {
 pub fn encode(pem: &Pem) -> String {
     encode_config(
         pem,
-        &EncodeConfig {
+        EncodeConfig {
             line_ending: LineEnding::CRLF,
         },
     )
@@ -348,9 +357,9 @@ pub fn encode(pem: &Pem) -> String {
 ///     tag: String::from("FOO"),
 ///     contents: vec![1, 2, 3, 4],
 ///   };
-///   encode_config(&pem, &EncodeConfig { line_ending: LineEnding::LF });
+///   encode_config(&pem, EncodeConfig { line_ending: LineEnding::LF });
 /// ```
-pub fn encode_config(pem: &Pem, config: &EncodeConfig) -> String {
+pub fn encode_config(pem: &Pem, config: EncodeConfig) -> String {
     let line_ending = match config.line_ending {
         LineEnding::CRLF => "\r\n",
         LineEnding::LF => "\n",
@@ -358,25 +367,18 @@ pub fn encode_config(pem: &Pem, config: &EncodeConfig) -> String {
 
     let mut output = String::new();
 
-    let contents;
-
-    if pem.contents.is_empty() {
-        contents = String::from("");
+    let contents = if pem.contents.is_empty() {
+        String::from("")
     } else {
-        contents = base64::encode_config(
+        base64::encode_config(
             &pem.contents,
-            base64::Config::new(
-                base64::CharacterSet::Standard,
-                true,
-            ),
-        );
-    }
+            base64::Config::new(base64::CharacterSet::Standard, true),
+        )
+    };
 
     output.push_str(&format!("-----BEGIN {}-----{}", pem.tag, line_ending));
     for c in contents.as_bytes().chunks(LINE_WRAP) {
-        output.push_str(&format!("{}{}",
-                                 str::from_utf8(c).unwrap(),
-                                 line_ending));
+        output.push_str(&format!("{}{}", str::from_utf8(c).unwrap(), line_ending));
     }
     output.push_str(&format!("-----END {}-----{}", pem.tag, line_ending));
 
@@ -427,9 +429,9 @@ pub fn encode_many(pems: &[Pem]) -> String {
 ///         contents: vec![5, 6, 7, 8],
 ///     },
 ///   ];
-///   encode_many_config(&data, &EncodeConfig { line_ending: LineEnding::LF });
+///   encode_many_config(&data, EncodeConfig { line_ending: LineEnding::LF });
 /// ```
-pub fn encode_many_config(pems: &[Pem], config: &EncodeConfig) -> String {
+pub fn encode_many_config(pems: &[Pem], config: EncodeConfig) -> String {
     let line_ending = match config.line_ending {
         LineEnding::CRLF => "\r\n",
         LineEnding::LF => "\n",
@@ -609,7 +611,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
         let config = EncodeConfig {
             line_ending: LineEnding::LF,
         };
-        let encoded = encode_config(&pem, &config);
+        let encoded = encode_config(&pem, config);
         assert!(encoded != "");
 
         let pem_out = parse(&encoded).unwrap();
@@ -622,7 +624,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
         let config = EncodeConfig {
             line_ending: LineEnding::LF,
         };
-        let encoded = encode_many_config(&pems, &config);
+        let encoded = encode_many_config(&pems, config);
 
         assert_eq!(SAMPLE_LF, encoded);
     }

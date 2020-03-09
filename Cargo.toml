@@ -12,7 +12,7 @@ categories = [ "cryptography" ]
 edition = "2018"
 
 [dependencies]
-base64 = "^0.11"
+base64 = "^0.12"
 lazy_static = "1.0"
 regex = "1"
 

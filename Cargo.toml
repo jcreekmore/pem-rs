@@ -13,7 +13,7 @@ edition = "2018"
 
 [dependencies]
 base64 = "^0.12"
-lazy_static = "1.0"
+once_cell = "1.4"
 regex = "1"
 
 [dev-dependencies]

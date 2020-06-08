@@ -19,7 +19,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! pem = "0.4"
+//! pem = "0.8"
 //! ```
 //!
 //! and this to your crate root:
@@ -106,7 +106,7 @@
 mod errors;
 
 pub use crate::errors::{PemError, Result};
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use regex::bytes::{Captures, Regex};
 use std::str;
 
@@ -116,9 +116,9 @@ const REGEX_STR: &str =
 /// The line length for PEM encoding
 const LINE_WRAP: usize = 64;
 
-lazy_static! {
-    static ref ASCII_ARMOR: Regex = Regex::new(REGEX_STR).unwrap();
-}
+static ASCII_ARMOR: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(REGEX_STR).unwrap()
+});
 
 /// Enum describing line endings
 #[derive(Debug, Clone, Copy)]

@@ -111,7 +111,7 @@ use regex::bytes::{Captures, Regex};
 use std::str;
 
 const REGEX_STR: &str =
-    r"(?s)-----BEGIN (?P<begin>.*?)-----\s*(?P<data>.*?)-----END (?P<end>.*?)-----\s*";
+    r"(?s)-----BEGIN (?P<begin>.*?)-----[ \t\n\r]*(?P<data>.*?)-----END (?P<end>.*?)-----[ \t\n\r]*";
 
 /// The line length for PEM encoding
 const LINE_WRAP: usize = 64;

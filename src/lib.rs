@@ -137,7 +137,7 @@ pub struct EncodeConfig {
 }
 
 /// A representation of Pem-encoded data
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Pem {
     /// The tag extracted from the Pem-encoded data
     pub tag: String,

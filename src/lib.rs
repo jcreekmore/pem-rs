@@ -84,7 +84,7 @@
 //! -----END CERTIFICATE-----
 //! ";
 //!
-//!  let pems = parse_many(SAMPLE);
+//!  let pems = parse_many(SAMPLE).unwrap();
 //!  assert_eq!(pems.len(), 2);
 //!  assert_eq!(pems[0].tag, "INTERMEDIATE CERT");
 //!  assert_eq!(pems[1].tag, "CERTIFICATE");
@@ -278,7 +278,7 @@ pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
 /// ";
 /// let SAMPLE_BYTES: Vec<u8> = SAMPLE.into();
 ///
-///  let pems = parse_many(SAMPLE_BYTES);
+///  let pems = parse_many(SAMPLE_BYTES).unwrap();
 ///  assert_eq!(pems.len(), 2);
 ///  assert_eq!(pems[0].tag, "INTERMEDIATE CERT");
 ///  assert_eq!(pems[1].tag, "CERTIFICATE");
@@ -312,16 +312,16 @@ pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
 /// ";
 ///  let SAMPLE_STRING: Vec<u8> = SAMPLE.into();
 ///
-///  let pems = parse_many(SAMPLE_STRING);
+///  let pems = parse_many(SAMPLE_STRING).unwrap();
 ///  assert_eq!(pems.len(), 2);
 ///  assert_eq!(pems[0].tag, "INTERMEDIATE CERT");
 ///  assert_eq!(pems[1].tag, "CERTIFICATE");
 /// ```
-pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Vec<Pem> {
+pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Result<Vec<Pem>> {
     // Each time our regex matches a PEM section, we need to decode it.
     ASCII_ARMOR
         .captures_iter(&input.as_ref())
-        .filter_map(|caps| Pem::new_from_captures(caps).ok())
+        .map(|caps| Pem::new_from_captures(caps))
         .collect()
 }
 
@@ -562,10 +562,16 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 
     #[test]
     fn test_parse_many_works() {
-        let pems = parse_many(SAMPLE_CRLF);
+        let pems = parse_many(SAMPLE_CRLF).unwrap();
         assert_eq!(pems.len(), 2);
         assert_eq!(pems[0].tag, "RSA PRIVATE KEY");
         assert_eq!(pems[1].tag, "RSA PUBLIC KEY");
+    }
+
+    #[test]
+    fn test_parse_many_errors_on_invalid_section() {
+        let input = SAMPLE_LF.to_owned() + "-----BEGIN -----\n-----END -----";
+        assert_eq!(parse_many(&input), Err(PemError::MissingBeginTag));
     }
 
     #[test]
@@ -596,7 +602,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 
     #[test]
     fn test_encode_many() {
-        let pems = parse_many(SAMPLE_CRLF);
+        let pems = parse_many(SAMPLE_CRLF).unwrap();
         let encoded = encode_many(&pems);
 
         assert_eq!(SAMPLE_CRLF, encoded);
@@ -620,7 +626,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 
     #[test]
     fn test_encode_many_config() {
-        let pems = parse_many(SAMPLE_LF);
+        let pems = parse_many(SAMPLE_LF).unwrap();
         let config = EncodeConfig {
             line_ending: LineEnding::LF,
         };

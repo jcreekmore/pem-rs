@@ -30,7 +30,7 @@ fn pem_parse() {
 }
 
 fn pem_parse_many() {
-    pem::parse_many(SAMPLE);
+    pem::parse_many(SAMPLE).unwrap();
 }
 
 fn pem_encode(pem: &pem::Pem) {

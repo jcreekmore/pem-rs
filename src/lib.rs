@@ -116,9 +116,14 @@ const REGEX_STR: &str =
 /// The line length for PEM encoding
 const LINE_WRAP: usize = 64;
 
-static ASCII_ARMOR: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(REGEX_STR).unwrap()
-});
+
+fn ascii_armor() -> &'static Regex {
+    static ASCII_ARMOR: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(REGEX_STR).unwrap()
+    });
+
+    &ASCII_ARMOR
+}
 
 /// Enum describing line endings
 #[derive(Debug, Clone, Copy)]
@@ -242,7 +247,7 @@ impl Pem {
 ///  assert_eq!(pem.tag, "RSA PRIVATE KEY");
 /// ```
 pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
-    ASCII_ARMOR
+    ascii_armor()
         .captures(&input.as_ref())
         .ok_or_else(|| PemError::MalformedFraming)
         .and_then(Pem::new_from_captures)
@@ -319,7 +324,7 @@ pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
 /// ```
 pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Result<Vec<Pem>> {
     // Each time our regex matches a PEM section, we need to decode it.
-    ASCII_ARMOR
+    ascii_armor()
         .captures_iter(&input.as_ref())
         .map(|caps| Pem::new_from_captures(caps))
         .collect()

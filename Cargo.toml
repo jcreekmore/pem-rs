@@ -13,8 +13,6 @@ edition = "2018"
 
 [dependencies]
 base64 = "0.13.0"
-once_cell = "1.4"
-regex = {version = "1", default-features = false, features = ["std"]}
 
 [dev-dependencies]
 criterion = "0.3.0"

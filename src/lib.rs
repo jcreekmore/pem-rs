@@ -104,26 +104,14 @@
 )]
 
 mod errors;
+mod parser;
+use parser::{parse_captures, parse_captures_iter, Captures};
 
 pub use crate::errors::{PemError, Result};
-use once_cell::sync::Lazy;
-use regex::bytes::{Captures, Regex};
 use std::str;
-
-const REGEX_STR: &str =
-    r"(?s)-----BEGIN (?P<begin>.*?)-----[ \t\n\r]*(?P<data>.*?)-----END (?P<end>.*?)-----[ \t\n\r]*";
 
 /// The line length for PEM encoding
 const LINE_WRAP: usize = 64;
-
-
-fn ascii_armor() -> &'static Regex {
-    static ASCII_ARMOR: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(REGEX_STR).unwrap()
-    });
-
-    &ASCII_ARMOR
-}
 
 /// Enum describing line endings
 #[derive(Debug, Clone, Copy)]
@@ -157,21 +145,13 @@ impl Pem {
         }
 
         // Verify that the begin section exists
-        let tag = as_utf8(
-            caps.name("begin")
-                .ok_or_else(|| PemError::MissingBeginTag)?
-                .as_bytes(),
-        )?;
+        let tag = as_utf8(caps.begin)?;
         if tag.is_empty() {
             return Err(PemError::MissingBeginTag);
         }
 
         // as well as the end section
-        let tag_end = as_utf8(
-            caps.name("end")
-                .ok_or_else(|| PemError::MissingEndTag)?
-                .as_bytes(),
-        )?;
+        let tag_end = as_utf8(caps.end)?;
         if tag_end.is_empty() {
             return Err(PemError::MissingEndTag);
         }
@@ -182,11 +162,7 @@ impl Pem {
         }
 
         // If they did, then we can grab the data section
-        let raw_data = as_utf8(
-            caps.name("data")
-                .ok_or_else(|| PemError::MissingData)?
-                .as_bytes(),
-        )?;
+        let raw_data = as_utf8(caps.data)?;
 
         // We need to get rid of newlines for base64::decode
         // As base64 requires an AsRef<[u8]>, this must involve a copy
@@ -247,8 +223,7 @@ impl Pem {
 ///  assert_eq!(pem.tag, "RSA PRIVATE KEY");
 /// ```
 pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
-    ascii_armor()
-        .captures(&input.as_ref())
+    parse_captures(&input.as_ref())
         .ok_or_else(|| PemError::MalformedFraming)
         .and_then(Pem::new_from_captures)
 }
@@ -324,8 +299,7 @@ pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
 /// ```
 pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Result<Vec<Pem>> {
     // Each time our regex matches a PEM section, we need to decode it.
-    ascii_armor()
-        .captures_iter(&input.as_ref())
+    parse_captures_iter(&input.as_ref())
         .map(|caps| Pem::new_from_captures(caps))
         .collect()
 }

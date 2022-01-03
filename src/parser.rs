@@ -55,8 +55,13 @@ fn parser_inner<'a>(input: &'a [u8]) -> Option<(&'a [u8], Captures<'a>)> {
 
 // Equivalent to the regex [ \t\n\r]*
 fn skip_whitespace(mut input: &[u8]) -> &[u8] {
-    while let Some(b' ' | b'\t' | b'\n' | b'\r') = input.first() {
-        input = &input[1..];
+    while let Some(b) = input.first() {
+        match b {
+            b' ' | b'\t' | b'\n' | b'\r' => {
+                input = &input[1..];
+            }
+            _ => break,
+        }
     }
     input
 }

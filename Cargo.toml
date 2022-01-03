@@ -10,11 +10,10 @@ repository = "https://github.com/jcreekmore/pem-rs.git"
 version = "1.0.2-alpha.0"
 categories = [ "cryptography" ]
 edition = "2018"
+rust-version = "1.34.2"
 
 [dependencies]
 base64 = "0.13.0"
-once_cell = "1.4"
-regex = {version = "1", default-features = false, features = ["std"]}
 
 [dev-dependencies]
 criterion = "0.3.0"

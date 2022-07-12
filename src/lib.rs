@@ -103,6 +103,9 @@
     unused_qualifications
 )]
 
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 mod errors;
 mod parser;
 use parser::{parse_captures, parse_captures_iter, Captures};
@@ -131,6 +134,7 @@ pub struct EncodeConfig {
 
 /// A representation of Pem-encoded data
 #[derive(PartialEq, Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Pem {
     /// The tag extracted from the Pem-encoded data
     pub tag: String,
@@ -612,5 +616,17 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
         let encoded = encode_many_config(&pems, config);
 
         assert_eq!(SAMPLE_LF, encoded);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_serde() {
+        let pem = Pem {
+            tag: String::from("Mock tag"),
+            contents: "Mock contents".as_bytes().to_vec(),
+        };
+        let value = serde_json::to_string_pretty(&pem).unwrap();
+        let result = serde_json::from_str(&value).unwrap();
+        assert_eq!(pem, result);
     }
 }

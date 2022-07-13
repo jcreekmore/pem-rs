@@ -103,9 +103,6 @@
     unused_qualifications
 )]
 
-#[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
-
 mod errors;
 mod parser;
 use parser::{parse_captures, parse_captures_iter, Captures};
@@ -134,7 +131,6 @@ pub struct EncodeConfig {
 
 /// A representation of Pem-encoded data
 #[derive(PartialEq, Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Pem {
     /// The tag extracted from the Pem-encoded data
     pub tag: String,
@@ -423,6 +419,51 @@ pub fn encode_many_config(pems: &[Pem], config: EncodeConfig) -> String {
         .map(|value| encode_config(value, config))
         .collect::<Vec<String>>()
         .join(line_ending)
+}
+
+#[cfg(feature = "serde")]
+mod serde_impl {
+    use super::{encode, parse, Pem};
+    use serde::{
+        de::{Error, Visitor},
+        Deserialize, Serialize,
+    };
+    use std::fmt;
+
+    impl Serialize for Pem {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serializer.serialize_str(&encode(self))
+        }
+    }
+
+    struct PemVisitor;
+
+    impl<'de> Visitor<'de> for PemVisitor {
+        type Value = Pem;
+
+        fn expecting(&self, _formatter: &mut fmt::Formatter) -> fmt::Result {
+            Ok(())
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            parse(v).map_err(Error::custom)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for Pem {
+        fn deserialize<D>(deserializer: D) -> Result<Pem, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            deserializer.deserialize_str(PemVisitor)
+        }
+    }
 }
 
 #[cfg(test)]

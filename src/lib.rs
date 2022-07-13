@@ -19,7 +19,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! pem = "0.8"
+//! pem = "1"
 //! ```
 //!
 //! and this to your crate root:
@@ -27,6 +27,9 @@
 //! ```rust
 //! extern crate pem;
 //! ```
+//!
+//! Using the `serde` feature will implement the serde traits for 
+//! the `Pem` struct.
 //!
 //! # Example: parse a single chunk of PEM-encoded text
 //!

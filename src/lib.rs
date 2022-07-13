@@ -19,7 +19,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! pem = "0.8"
+//! pem = "1"
 //! ```
 //!
 //! and this to your crate root:
@@ -27,6 +27,9 @@
 //! ```rust
 //! extern crate pem;
 //! ```
+//!
+//! Using the `serde` feature will implement the serde traits for 
+//! the `Pem` struct.
 //!
 //! # Example: parse a single chunk of PEM-encoded text
 //!
@@ -421,6 +424,51 @@ pub fn encode_many_config(pems: &[Pem], config: EncodeConfig) -> String {
         .join(line_ending)
 }
 
+#[cfg(feature = "serde")]
+mod serde_impl {
+    use super::{encode, parse, Pem};
+    use serde::{
+        de::{Error, Visitor},
+        Deserialize, Serialize,
+    };
+    use std::fmt;
+
+    impl Serialize for Pem {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serializer.serialize_str(&encode(self))
+        }
+    }
+
+    struct PemVisitor;
+
+    impl<'de> Visitor<'de> for PemVisitor {
+        type Value = Pem;
+
+        fn expecting(&self, _formatter: &mut fmt::Formatter) -> fmt::Result {
+            Ok(())
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            parse(v).map_err(Error::custom)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for Pem {
+        fn deserialize<D>(deserializer: D) -> Result<Pem, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            deserializer.deserialize_str(PemVisitor)
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -612,5 +660,17 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
         let encoded = encode_many_config(&pems, config);
 
         assert_eq!(SAMPLE_LF, encoded);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_serde() {
+        let pem = Pem {
+            tag: String::from("Mock tag"),
+            contents: "Mock contents".as_bytes().to_vec(),
+        };
+        let value = serde_json::to_string_pretty(&pem).unwrap();
+        let result = serde_json::from_str(&value).unwrap();
+        assert_eq!(pem, result);
     }
 }

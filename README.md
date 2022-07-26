@@ -39,6 +39,7 @@ DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
 TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
 ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
 -----END RSA PRIVATE KEY-----
+";
 
 let pem = parse(SAMPLE)?;
 println!("PEM tag: {}", pem.tag);

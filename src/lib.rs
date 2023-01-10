@@ -28,7 +28,7 @@
 //! extern crate pem;
 //! ```
 //!
-//! Using the `serde` feature will implement the serde traits for 
+//! Using the `serde` feature will implement the serde traits for
 //! the `Pem` struct.
 //!
 //! # Example: parse a single chunk of PEM-encoded text
@@ -141,6 +141,17 @@ pub struct Pem {
     pub contents: Vec<u8>,
 }
 
+fn decode_data(raw_data: &str) -> Result<Vec<u8>> {
+    // We need to get rid of newlines for base64::decode
+    // As base64 requires an AsRef<[u8]>, this must involve a copy
+    let data: String = raw_data.lines().map(str::trim_end).collect();
+
+    // And decode it from Base64 into a vector of u8
+    let contents = base64::decode_config(&data, base64::STANDARD).map_err(PemError::InvalidData)?;
+
+    Ok(contents)
+}
+
 impl Pem {
     fn new_from_captures(caps: Captures) -> Result<Pem> {
         fn as_utf8<'a>(bytes: &'a [u8]) -> Result<&'a str> {
@@ -166,14 +177,7 @@ impl Pem {
 
         // If they did, then we can grab the data section
         let raw_data = as_utf8(caps.data)?;
-
-        // We need to get rid of newlines for base64::decode
-        // As base64 requires an AsRef<[u8]>, this must involve a copy
-        let data: String = raw_data.lines().map(str::trim_end).collect();
-
-        // And decode it from Base64 into a vector of u8
-        let contents =
-            base64::decode_config(&data, base64::STANDARD).map_err(PemError::InvalidData)?;
+        let contents = decode_data(raw_data)?;
 
         Ok(Pem {
             tag: tag.to_owned(),
@@ -672,5 +676,125 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
         let value = serde_json::to_string_pretty(&pem).unwrap();
         let result = serde_json::from_str(&value).unwrap();
         assert_eq!(pem, result);
+    }
+
+    const HEADER_CRLF: &'static str = "-----BEGIN CERTIFICATE-----\r
+MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc\r
+dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO\r
+2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei\r
+AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un\r
+DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT\r
+TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh\r
+ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ\r
+-----END CERTIFICATE-----\r
+-----BEGIN RSA PRIVATE KEY-----\r
+Proc-Type: 4,ENCRYPTED\r
+DEK-Info: AES-256-CBC,975C518B7D2CCD1164A3354D1F89C5A6\r
+\r
+MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oYo\r
+QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0\r
+RFI1MrnzRbCmOkM6tgVO0cd6r5Z4bDGLusH9yjI9iI84gPRjK0AzymXFmBGuREHI\r
+sQIhAPKf4pp+Prvutgq2ayygleZChBr1DC4XnnufBNtaswyvAiEAzNGVKgNvzuhk\r
+ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6\r
+/+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g\r
+RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg\r
+-----END RSA PRIVATE KEY-----\r
+";
+    const HEADER_CRLF_DATA: [&'static str; 2] = [
+        "MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc\r
+dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO\r
+2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei\r
+AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un\r
+DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT\r
+TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh\r
+ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ\r",
+        "MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oYo\r
+QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0\r
+RFI1MrnzRbCmOkM6tgVO0cd6r5Z4bDGLusH9yjI9iI84gPRjK0AzymXFmBGuREHI\r
+sQIhAPKf4pp+Prvutgq2ayygleZChBr1DC4XnnufBNtaswyvAiEAzNGVKgNvzuhk\r
+ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6\r
+/+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g\r
+RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg\r",
+    ];
+
+    const HEADER_LF: &'static str = "-----BEGIN CERTIFICATE-----
+MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+-----END CERTIFICATE-----
+-----BEGIN RSA PRIVATE KEY-----
+Proc-Type: 4,ENCRYPTED
+DEK-Info: AES-256-CBC,975C518B7D2CCD1164A3354D1F89C5A6
+
+MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oYo
+QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0
+RFI1MrnzRbCmOkM6tgVO0cd6r5Z4bDGLusH9yjI9iI84gPRjK0AzymXFmBGuREHI
+sQIhAPKf4pp+Prvutgq2ayygleZChBr1DC4XnnufBNtaswyvAiEAzNGVKgNvzuhk
+ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
+/+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
+RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
+-----END RSA PRIVATE KEY-----
+";
+    const HEADER_LF_DATA: [&'static str; 2] = [
+        "MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
+dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
+2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
+AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un
+DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT
+TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh
+ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ",
+        "MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oYo
+QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0
+RFI1MrnzRbCmOkM6tgVO0cd6r5Z4bDGLusH9yjI9iI84gPRjK0AzymXFmBGuREHI
+sQIhAPKf4pp+Prvutgq2ayygleZChBr1DC4XnnufBNtaswyvAiEAzNGVKgNvzuhk
+ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
+/+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
+RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg",
+    ];
+
+    fn cmp_data(left: &[u8], right: &[u8]) -> bool {
+        if left.len() != right.len() {
+            false
+        } else {
+            left.iter()
+                .zip(right.iter())
+                .all(|(left, right)| left == right)
+        }
+    }
+
+    #[test]
+    fn test_parse_many_with_headers_crlf() {
+        let pems = parse_many(HEADER_CRLF).unwrap();
+        assert_eq!(pems.len(), 2);
+        assert_eq!(pems[0].tag, "CERTIFICATE");
+        assert!(cmp_data(
+            &pems[0].contents,
+            &decode_data(HEADER_CRLF_DATA[0]).unwrap()
+        ));
+        assert_eq!(pems[1].tag, "RSA PRIVATE KEY");
+        assert!(cmp_data(
+            &pems[1].contents,
+            &decode_data(HEADER_CRLF_DATA[1]).unwrap()
+        ));
+    }
+
+    #[test]
+    fn test_parse_many_with_headers_lf() {
+        let pems = parse_many(HEADER_LF).unwrap();
+        assert_eq!(pems.len(), 2);
+        assert_eq!(pems[0].tag, "CERTIFICATE");
+        assert!(cmp_data(
+            &pems[0].contents,
+            &decode_data(HEADER_LF_DATA[0]).unwrap()
+        ));
+        assert_eq!(pems[1].tag, "RSA PRIVATE KEY");
+        assert!(cmp_data(
+            &pems[1].contents,
+            &decode_data(HEADER_LF_DATA[1]).unwrap()
+        ));
     }
 }

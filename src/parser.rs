@@ -33,6 +33,33 @@ impl<'a> Iterator for CaptureMatches<'a> {
     }
 }
 
+fn parse_begin<'a>(input: &'a [u8]) -> Option<(&'a [u8], &'a [u8])> {
+    let (input, _) = read_until(input, b"-----BEGIN ")?;
+    let (input, begin) = read_until(input, b"-----")?;
+    let input = skip_whitespace(input);
+    Some((input, begin))
+}
+
+fn parse_payload<'a>(input: &'a [u8]) -> Option<(&'a [u8], &'a [u8])> {
+    read_until(input, b"-----END ")
+}
+
+fn extract_headers_and_data<'a>(input: &'a [u8]) -> (&'a [u8], &'a [u8]) {
+    if let Some((rest, headers)) = read_until(input, b"\n\n") {
+        (headers, rest)
+    } else if let Some((rest, headers)) = read_until(input, b"\r\n\r\n") {
+        (headers, rest)
+    } else {
+        (&[], input)
+    }
+}
+
+fn parse_end<'a>(input: &'a [u8]) -> Option<(&'a [u8], &'a [u8])> {
+    let (remaining, end) = read_until(input, b"-----")?;
+    let remaining = skip_whitespace(remaining);
+    Some((remaining, end))
+}
+
 fn parser_inner<'a>(input: &'a [u8]) -> Option<(&'a [u8], Captures<'a>)> {
     // Should be equivalent to the regex
     // "(?s)-----BEGIN (?P<begin>.*?)-----[ \t\n\r]*(?P<data>.*?)-----END (?P<end>.*?)-----[ \t\n\r]*"
@@ -42,12 +69,10 @@ fn parser_inner<'a>(input: &'a [u8]) -> Option<(&'a [u8], Captures<'a>)> {
     // (?P<data>.*?)                             # Parse data
     // -----END (?P<end>.*?)-----[ \t\n\r]*      # Parse end
 
-    let (input, _) = read_until(input, b"-----BEGIN ")?;
-    let (input, begin) = read_until(input, b"-----")?;
-    let input = skip_whitespace(input);
-    let (input, data) = read_until(input, b"-----END ")?;
-    let (remaining, end) = read_until(input, b"-----")?;
-    let remaining = skip_whitespace(remaining);
+    let (input, begin) = parse_begin(input)?;
+    let (input, payload) = parse_payload(input)?;
+    let (_headers, data) = extract_headers_and_data(payload);
+    let (remaining, end) = parse_end(input)?;
 
     let captures = Captures { begin, data, end };
     Some((remaining, captures))

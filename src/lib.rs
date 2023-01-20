@@ -108,7 +108,9 @@
 
 mod errors;
 mod parser;
+
 use parser::{parse_captures, parse_captures_iter, Captures};
+use std::borrow::Borrow;
 
 pub use crate::errors::{PemError, Result};
 use std::str;
@@ -315,6 +317,17 @@ pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Result<Vec<Pem>> {
 ///
 /// # Example
 /// ```rust
+///  use pem::{RefPem, encode};
+///
+///  let pem = RefPem {
+///     tag: "FOO",
+///     contents: &[1, 2, 3, 4],
+///   };
+///   encode(&pem);
+/// ```
+///
+/// It is also possible to the `Pem` struct:
+/// ```rust
 ///  use pem::{Pem, encode};
 ///
 ///  let pem = Pem {
@@ -323,7 +336,10 @@ pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Result<Vec<Pem>> {
 ///   };
 ///   encode(&pem);
 /// ```
-pub fn encode(pem: &Pem) -> String {
+pub fn encode<'p, P>(pem: P) -> String
+where
+    P: Into<RefPem<'p>>,
+{
     encode_config(
         pem,
         EncodeConfig {
@@ -337,15 +353,20 @@ pub fn encode(pem: &Pem) -> String {
 ///
 /// # Example
 /// ```rust
-///  use pem::{Pem, encode_config, EncodeConfig, LineEnding};
+///  use pem::{RefPem, encode_config, EncodeConfig, LineEnding};
 ///
-///  let pem = Pem {
-///     tag: String::from("FOO"),
-///     contents: vec![1, 2, 3, 4],
+///  let pem = RefPem {
+///     tag: "FOO",
+///     contents: &[1, 2, 3, 4],
 ///   };
 ///   encode_config(&pem, EncodeConfig { line_ending: LineEnding::LF });
 /// ```
-pub fn encode_config(pem: &Pem, config: EncodeConfig) -> String {
+pub fn encode_config<'p, P>(pem: P, config: EncodeConfig) -> String
+where
+    P: Into<RefPem<'p>>,
+{
+    let pem = pem.into();
+
     let line_ending = match config.line_ending {
         LineEnding::CRLF => "\r\n",
         LineEnding::LF => "\n",
@@ -369,6 +390,24 @@ pub fn encode_config(pem: &Pem, config: EncodeConfig) -> String {
     output.push_str(&format!("-----END {}-----{}", pem.tag, line_ending));
 
     output
+}
+
+/// Necessary data for encoding PEM data
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefPem<'p> {
+    /// The tag for the Pem-encoded data
+    pub tag: &'p str,
+    /// The binary contents for the Pem-encoded data
+    pub contents: &'p [u8],
+}
+
+impl<'p> From<&'p Pem> for RefPem<'p> {
+    fn from(value: &'p Pem) -> Self {
+        Self {
+            tag: &value.tag,
+            contents: &value.contents,
+        }
+    }
 }
 
 /// Encode multiple PEM structs into a PEM-encoded data string
@@ -796,5 +835,20 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg",
             &pems[1].contents,
             &decode_data(HEADER_LF_DATA[1]).unwrap()
         ));
+    }
+
+    #[test]
+    fn test_encode_ref() {
+        let pem = RefPem {
+            tag: "FOO",
+            contents: &[1, 2, 3, 4],
+        };
+
+        let encoded = encode_ref(pem.clone());
+
+        assert_ne!(encoded, "");
+
+        let pem_out = parse(&encoded).unwrap();
+        assert_eq!(pem, RefPem::from(&pem_out));
     }
 }

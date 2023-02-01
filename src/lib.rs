@@ -92,6 +92,17 @@
 //!  assert_eq!(pems[0].tag(), "INTERMEDIATE CERT");
 //!  assert_eq!(pems[1].tag(), "CERTIFICATE");
 //! ```
+//!
+//! # Features
+//!
+//! This crate supports two features: `std` and `serde`.
+//!
+//! The `std` feature is enabled by default. If you specify
+//! `default-features = false` to disable `std`, be aware that
+//! this crate still needs an allocator.
+//!
+//! The `serde` feature implements `serde::{Deserialize, Serialize}`
+//! for this crate's `Pem` struct.
 
 #![recursion_limit = "1024"]
 #![deny(
@@ -105,6 +116,16 @@
     unused_import_braces,
     unused_qualifications
 )]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(not(any(feature = "std", test)))]
+extern crate alloc;
+#[cfg(not(any(feature = "std", test)))]
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 mod errors;
 mod parser;
@@ -112,8 +133,7 @@ use parser::{parse_captures, parse_captures_iter, Captures};
 
 pub use crate::errors::{PemError, Result};
 use base64::Engine as _;
-use std::fmt;
-use std::str;
+use core::{fmt, str};
 
 /// The line length for PEM encoding
 const LINE_WRAP: usize = 64;

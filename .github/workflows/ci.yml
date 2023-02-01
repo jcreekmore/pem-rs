@@ -18,3 +18,7 @@ jobs:
       - run: cargo clippy --all-features -- --deny warnings
       - run: cargo test --all-features
       - run: cargo bench --all-features
+      # For no_std we use check instead of test because
+      # std is required for the test suite to run.
+      - run: cargo clippy --no-default-features -- --deny warnings
+      - run: cargo check --no-default-features

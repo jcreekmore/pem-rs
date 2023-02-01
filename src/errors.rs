@@ -23,14 +23,14 @@ impl fmt::Display for PemError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             PemError::MismatchedTags(b, e) => {
-                write!(f, "mismatching BEGIN (\"{}\") and END (\"{}\") tags", b, e)
+                write!(f, "mismatching BEGIN (\"{b}\") and END (\"{e}\") tags")
             }
             PemError::MalformedFraming => write!(f, "malformedframing"),
             PemError::MissingBeginTag => write!(f, "missing BEGIN tag"),
             PemError::MissingEndTag => write!(f, "missing END tag"),
             PemError::MissingData => write!(f, "missing data"),
-            PemError::InvalidData(e) => write!(f, "invalid data: {}", e),
-            PemError::NotUtf8(e) => write!(f, "invalid utf-8 value: {}", e),
+            PemError::InvalidData(e) => write!(f, "invalid data: {e}"),
+            PemError::NotUtf8(e) => write!(f, "invalid utf-8 value: {e}"),
         }
     }
 }

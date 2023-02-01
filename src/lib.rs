@@ -147,15 +147,15 @@ fn decode_data(raw_data: &str) -> Result<Vec<u8>> {
     let data: String = raw_data.lines().map(str::trim_end).collect();
 
     // And decode it from Base64 into a vector of u8
-    let contents = base64::decode_config(&data, base64::STANDARD).map_err(PemError::InvalidData)?;
+    let contents = base64::decode_config(data, base64::STANDARD).map_err(PemError::InvalidData)?;
 
     Ok(contents)
 }
 
 impl Pem {
     fn new_from_captures(caps: Captures) -> Result<Pem> {
-        fn as_utf8<'a>(bytes: &'a [u8]) -> Result<&'a str> {
-            Ok(str::from_utf8(bytes).map_err(PemError::NotUtf8)?)
+        fn as_utf8(bytes: &[u8]) -> Result<&str> {
+            str::from_utf8(bytes).map_err(PemError::NotUtf8)
         }
 
         // Verify that the begin section exists
@@ -230,8 +230,8 @@ impl Pem {
 ///  assert_eq!(pem.tag, "RSA PRIVATE KEY");
 /// ```
 pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
-    parse_captures(&input.as_ref())
-        .ok_or_else(|| PemError::MalformedFraming)
+    parse_captures(input.as_ref())
+        .ok_or(PemError::MalformedFraming)
         .and_then(Pem::new_from_captures)
 }
 
@@ -306,8 +306,8 @@ pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
 /// ```
 pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Result<Vec<Pem>> {
     // Each time our regex matches a PEM section, we need to decode it.
-    parse_captures_iter(&input.as_ref())
-        .map(|caps| Pem::new_from_captures(caps))
+    parse_captures_iter(input.as_ref())
+        .map(Pem::new_from_captures)
         .collect()
 }
 
@@ -478,7 +478,7 @@ mod test {
     use super::*;
     use std::error::Error;
 
-    const SAMPLE_CRLF: &'static str = "-----BEGIN RSA PRIVATE KEY-----\r
+    const SAMPLE_CRLF: &str = "-----BEGIN RSA PRIVATE KEY-----\r
 MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc\r
 dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO\r
 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei\r
@@ -499,7 +499,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg\r
 -----END RSA PUBLIC KEY-----\r
 ";
 
-    const SAMPLE_LF: &'static str = "-----BEGIN RSA PRIVATE KEY-----
+    const SAMPLE_LF: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
 dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
@@ -530,7 +530,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
     fn test_parse_invalid_framing() {
         let input = "--BEGIN data-----
         -----END data-----";
-        assert_eq!(parse(&input), Err(PemError::MalformedFraming));
+        assert_eq!(parse(input), Err(PemError::MalformedFraming));
     }
 
     #[test]
@@ -544,7 +544,7 @@ ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
 /+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
 RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 -----END RSA PUBLIC KEY-----";
-        assert_eq!(parse(&input), Err(PemError::MissingBeginTag));
+        assert_eq!(parse(input), Err(PemError::MissingBeginTag));
     }
 
     #[test]
@@ -558,7 +558,7 @@ ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
 /+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
 RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 -----END -----";
-        assert_eq!(parse(&input), Err(PemError::MissingEndTag));
+        assert_eq!(parse(input), Err(PemError::MissingEndTag));
     }
 
     #[test]
@@ -572,14 +572,14 @@ ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
 /+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
 RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 -----END DATA-----";
-        match parse(&input) {
+        match parse(input) {
             Err(e @ PemError::InvalidData(_)) => {
                 assert_eq!(
                     &format!("{}", e.source().unwrap()),
                     "Invalid byte 63, offset 63."
                 );
             }
-            _ => assert!(false),
+            _ => unreachable!(),
         }
     }
 
@@ -587,7 +587,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
     fn test_parse_empty_data() {
         let input = "-----BEGIN DATA-----
 -----END DATA-----";
-        let pem = parse(&input).unwrap();
+        let pem = parse(input).unwrap();
         assert_eq!(pem.contents.len(), 0);
     }
 
@@ -602,7 +602,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
     #[test]
     fn test_parse_many_errors_on_invalid_section() {
         let input = SAMPLE_LF.to_owned() + "-----BEGIN -----\n-----END -----";
-        assert_eq!(parse_many(&input), Err(PemError::MissingBeginTag));
+        assert_eq!(parse_many(input), Err(PemError::MissingBeginTag));
     }
 
     #[test]
@@ -612,7 +612,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
             contents: vec![],
         };
         let encoded = encode(&pem);
-        assert!(encoded != "");
+        assert!(!encoded.is_empty());
 
         let pem_out = parse(&encoded).unwrap();
         assert_eq!(&pem, &pem_out);
@@ -625,7 +625,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
             contents: vec![1, 2, 3, 4],
         };
         let encoded = encode(&pem);
-        assert!(encoded != "");
+        assert!(!encoded.is_empty());
 
         let pem_out = parse(&encoded).unwrap();
         assert_eq!(&pem, &pem_out);
@@ -649,7 +649,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
             line_ending: LineEnding::LF,
         };
         let encoded = encode_config(&pem, config);
-        assert!(encoded != "");
+        assert!(!encoded.is_empty());
 
         let pem_out = parse(&encoded).unwrap();
         assert_eq!(&pem, &pem_out);
@@ -678,7 +678,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
         assert_eq!(pem, result);
     }
 
-    const HEADER_CRLF: &'static str = "-----BEGIN CERTIFICATE-----\r
+    const HEADER_CRLF: &str = "-----BEGIN CERTIFICATE-----\r
 MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc\r
 dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO\r
 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei\r
@@ -700,7 +700,7 @@ ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6\r
 RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg\r
 -----END RSA PRIVATE KEY-----\r
 ";
-    const HEADER_CRLF_DATA: [&'static str; 2] = [
+    const HEADER_CRLF_DATA: [&str; 2] = [
         "MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc\r
 dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO\r
 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei\r
@@ -717,7 +717,7 @@ ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6\r
 RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg\r",
     ];
 
-    const HEADER_LF: &'static str = "-----BEGIN CERTIFICATE-----
+    const HEADER_LF: &str = "-----BEGIN CERTIFICATE-----
 MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
 dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei
@@ -739,7 +739,7 @@ ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
 RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 -----END RSA PRIVATE KEY-----
 ";
-    const HEADER_LF_DATA: [&'static str; 2] = [
+    const HEADER_LF_DATA: [&str; 2] = [
         "MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc
 dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO
 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei

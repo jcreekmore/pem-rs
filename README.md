@@ -3,7 +3,8 @@ pem
 
 A Rust library for parsing and encoding PEM-encoded data.
 
-[![Build Status](https://travis-ci.org/jcreekmore/pem-rs.svg?branch=master)](https://travis-ci.org/jcreekmore/pem-rs)
+![Build Status](https://github.com/github/docs/actions/workflows/ci.yml/badge.svg)
+
 
 ### Documentation
 [Module documentation with examples](https://docs.rs/pem/)
@@ -14,20 +15,12 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-pem = "1.0"
-```
-
-and this to your crate root:
-
-```rust
-extern crate pem;
+pem = "2.0"
 ```
 
 Here is a simple example that parse PEM-encoded data and prints the tag:
 
 ```rust
-extern crate pem;
-
 use pem::parse;
 
 const SAMPLE: &'static str = "-----BEGIN RSA PRIVATE KEY-----

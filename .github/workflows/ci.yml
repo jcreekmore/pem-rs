@@ -1,0 +1,20 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches:
+    - master
+jobs:
+  msrv:
+    name: msrv
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.67.0
+          components: clippy, rustfmt
+      - run: cargo fmt --all
+      - run: cargo clippy --all-features -- --deny warnings
+      - run: cargo test --all-features
+      - run: cargo bench --all-features

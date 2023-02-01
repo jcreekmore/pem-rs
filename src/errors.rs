@@ -3,8 +3,9 @@
 // Licensed under the MIT license <LICENSE.md or
 // http://opensource.org/licenses/MIT>. This file may not be
 // copied, modified, or distributed except according to those terms.
+use core::fmt;
+#[cfg(any(feature = "std", test))]
 use std::error::Error;
-use std::fmt;
 
 /// The `pem` error type.
 #[derive(Debug, Eq, PartialEq)]
@@ -16,7 +17,7 @@ pub enum PemError {
     MissingEndTag,
     MissingData,
     InvalidData(::base64::DecodeError),
-    NotUtf8(::std::str::Utf8Error),
+    NotUtf8(::core::str::Utf8Error),
 }
 
 impl fmt::Display for PemError {
@@ -35,6 +36,7 @@ impl fmt::Display for PemError {
     }
 }
 
+#[cfg(feature = "std")]
 impl Error for PemError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
@@ -47,5 +49,24 @@ impl Error for PemError {
     }
 }
 
+// FIXME(oliveruv): this could be better. Wanted to just do
+// #[cfg(any(feature = "std", test))]
+// but then it seems base64::DecodeError doesn't get the Error impl even
+// though it's got the same cfg attribute. Guess the test attribute is
+// only valid for the current crate?
+#[cfg(not(feature = "std"))]
+impl PemError {
+    #[allow(missing_docs)]
+    pub fn source(&self) -> Option<&(dyn core::fmt::Display + 'static)> {
+        match self {
+            // Errors originating from other libraries.
+            PemError::InvalidData(e) => Some(e),
+            PemError::NotUtf8(e) => Some(e),
+            // Errors directly originating from `pem-rs`.
+            _ => None,
+        }
+    }
+}
+
 /// The `pem` result type.
-pub type Result<T> = ::std::result::Result<T, PemError>;
+pub type Result<T> = ::core::result::Result<T, PemError>;

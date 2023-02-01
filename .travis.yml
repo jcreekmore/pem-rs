@@ -12,6 +12,7 @@ script:
 - |
   travis-cargo build &&
   travis-cargo test &&
+  travis-cargo test -- --no-default-features &&
   travis-cargo bench &&
   travis-cargo --only stable doc
 addons:

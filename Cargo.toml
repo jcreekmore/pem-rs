@@ -9,12 +9,32 @@ readme = "README.md"
 repository = "https://github.com/jcreekmore/pem-rs.git"
 version = "1.1.2-alpha.0"
 categories = [ "cryptography" ]
-edition = "2018"
-rust-version = "1.34.2"
+keywords = [
+    "pem",
+    "no_std",
+]
+edition = "2021"
+rust-version = "1.60.0" # 1.60.0 required for the "serde?/std" dependency feature
 
-[dependencies]
-base64 = "0.13.0"
-serde = { version = "1", optional = true, features = ["serde_derive"] }
+[features]
+default = ["std"]
+std = [
+    "base64/std",
+    # enable serde's std feature iff the serde and std features are both activated
+    "serde?/std",
+]
+serde = ["dep:serde"]
+
+[dependencies.base64]
+version = "0.13.0"
+default-features = false
+features = ["alloc"]
+
+[dependencies.serde]
+version = "1"
+optional = true
+default-features = false
+features = ["serde_derive"]
 
 [dev-dependencies]
 criterion = "0.3.0"

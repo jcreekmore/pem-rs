@@ -112,6 +112,7 @@ use parser::{parse_captures, parse_captures_iter, Captures};
 
 pub use crate::errors::{PemError, Result};
 use base64::Engine as _;
+use std::fmt;
 use std::str;
 
 /// The line length for PEM encoding
@@ -186,6 +187,28 @@ impl Pem {
             tag: tag.to_owned(),
             contents,
         })
+    }
+}
+
+impl str::FromStr for Pem {
+    type Err = PemError;
+
+    fn from_str(s: &str) -> Result<Pem> {
+        parse(s)
+    }
+}
+
+impl TryFrom<&[u8]> for Pem {
+    type Error = PemError;
+
+    fn try_from(s: &[u8]) -> Result<Pem> {
+        parse(s)
+    }
+}
+
+impl fmt::Display for Pem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", encode(self))
     }
 }
 
@@ -476,6 +499,7 @@ mod serde_impl {
 #[cfg(test)]
 mod test {
     use super::*;
+    use proptest::prelude::*;
     use std::error::Error;
 
     const SAMPLE_CRLF: &str = "-----BEGIN RSA PRIVATE KEY-----\r
@@ -796,5 +820,13 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg",
             &pems[1].contents,
             &decode_data(HEADER_LF_DATA[1]).unwrap()
         ));
+    }
+
+    proptest! {
+        #[test]
+        fn test_str_parse_and_display(tag in ".+", contents in prop::collection::vec(0..255u8, 0..200)) {
+            let pem = Pem { tag, contents };
+            prop_assert_eq!(&pem, &pem.to_string().parse::<Pem>().unwrap());
+        }
     }
 }

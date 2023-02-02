@@ -1,5 +1,6 @@
 pub struct Captures<'a> {
     pub begin: &'a [u8],
+    pub headers: &'a [u8],
     pub data: &'a [u8],
     pub end: &'a [u8],
 }
@@ -71,10 +72,10 @@ fn parser_inner(input: &[u8]) -> Option<(&[u8], Captures<'_>)> {
 
     let (input, begin) = parse_begin(input)?;
     let (input, payload) = parse_payload(input)?;
-    let (_headers, data) = extract_headers_and_data(payload);
+    let (headers, data) = extract_headers_and_data(payload);
     let (remaining, end) = parse_end(input)?;
 
-    let captures = Captures { begin, data, end };
+    let captures = Captures { begin, headers, data, end };
     Some((remaining, captures))
 }
 

@@ -1,8 +1,4 @@
-#[macro_use]
-extern crate criterion;
-extern crate pem;
-
-use criterion::Criterion;
+use criterion::{criterion_group, criterion_main, Criterion};
 
 const SAMPLE: &str = "-----BEGIN RSA PRIVATE KEY-----\r
 MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc\r
@@ -47,9 +43,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("pem::parse_many", |b| b.iter(pem_parse_many));
 
     // Encode
-    let pem = pem::Pem {
-        tag: String::from("RSA PRIVATE KEY"),
-        contents: vec![
+    let pem = pem::Pem::new(
+        "RSA PRIVATE KEY",
+        [
             48, 130, 1, 61, 2, 1, 0, 2, 65, 0, 235, 31, 139, 144, 6, 98, 23, 81, 179, 252, 122,
             171, 145, 251, 145, 39, 49, 3, 66, 179, 206, 167, 186, 88, 142, 160, 127, 175, 173,
             115, 162, 47, 41, 2, 104, 230, 180, 28, 117, 101, 146, 67, 73, 209, 26, 221, 161, 56,
@@ -68,13 +64,13 @@ fn criterion_benchmark(c: &mut Criterion) {
             176, 5, 147, 135, 242, 20, 63, 206, 123, 56, 112, 24, 118, 214, 154, 143, 210, 249,
             183, 222, 2, 34, 33, 217, 43, 54, 23, 18, 137,
         ],
-    };
+    );
     c.bench_function("pem::encode", move |b| b.iter(|| pem_encode(&pem)));
 
     let pems = vec![
-        pem::Pem {
-            tag: String::from("RSA PRIVATE KEY"),
-            contents: vec![
+        pem::Pem::new(
+            "RSA PRIVATE KEY",
+            vec![
                 48, 130, 1, 61, 2, 1, 0, 2, 65, 0, 235, 31, 139, 144, 6, 98, 23, 81, 179, 252, 122,
                 171, 145, 251, 145, 39, 49, 3, 66, 179, 206, 167, 186, 88, 142, 160, 127, 175, 173,
                 115, 162, 47, 41, 2, 104, 230, 180, 28, 117, 101, 146, 67, 73, 209, 26, 221, 161,
@@ -94,10 +90,10 @@ fn criterion_benchmark(c: &mut Criterion) {
                 112, 24, 118, 214, 154, 143, 210, 249, 183, 222, 2, 34, 33, 217, 43, 54, 23, 18,
                 137,
             ],
-        },
-        pem::Pem {
-            tag: String::from("RSA PUBLIC KEY"),
-            contents: vec![
+        ),
+        pem::Pem::new(
+            "RSA PUBLIC KEY",
+            vec![
                 48, 130, 1, 58, 2, 1, 0, 2, 65, 0, 194, 30, 10, 121, 253, 27, 254, 224, 217, 158,
                 137, 250, 161, 206, 19, 101, 194, 44, 187, 143, 162, 30, 77, 29, 51, 182, 22, 111,
                 143, 111, 48, 111, 105, 240, 104, 210, 134, 40, 65, 85, 114, 237, 250, 243, 198,
@@ -117,7 +113,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 151, 212, 173, 178, 23, 127, 236, 102, 237, 235, 159, 208, 98, 175, 175, 251, 27,
                 192, 121, 61, 2, 163, 34, 32,
             ],
-        },
+        ),
     ];
     c.bench_function("pem::encode_many", move |b| {
         b.iter(|| pem_encode_many(&pems))

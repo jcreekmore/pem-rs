@@ -53,7 +53,7 @@
 //! ";
 //!
 //!  let pem = parse(SAMPLE).unwrap();
-//!  assert_eq!(pem.tag, "RSA PRIVATE KEY");
+//!  assert_eq!(pem.tag(), "RSA PRIVATE KEY");
 //! ```
 //!
 //! # Example: parse a set of PEM-encoded test
@@ -89,8 +89,8 @@
 //!
 //!  let pems = parse_many(SAMPLE).unwrap();
 //!  assert_eq!(pems.len(), 2);
-//!  assert_eq!(pems[0].tag, "INTERMEDIATE CERT");
-//!  assert_eq!(pems[1].tag, "CERTIFICATE");
+//!  assert_eq!(pems[0].tag(), "INTERMEDIATE CERT");
+//!  assert_eq!(pems[1].tag(), "CERTIFICATE");
 //! ```
 
 #![recursion_limit = "1024"]
@@ -136,10 +136,8 @@ pub struct EncodeConfig {
 /// A representation of Pem-encoded data
 #[derive(PartialEq, Debug, Clone)]
 pub struct Pem {
-    /// The tag extracted from the Pem-encoded data
-    pub tag: String,
-    /// The binary contents of the Pem-encoded data
-    pub contents: Vec<u8>,
+    tag: String,
+    contents: Vec<u8>,
 }
 
 fn decode_data(raw_data: &str) -> Result<Vec<u8>> {
@@ -154,6 +152,26 @@ fn decode_data(raw_data: &str) -> Result<Vec<u8>> {
 }
 
 impl Pem {
+    /// Create a new Pem struct
+    pub fn new(tag: impl ToString, contents: impl Into<Vec<u8>>) -> Pem {
+        Pem { tag: tag.to_string(), contents: contents.into() }
+    }
+
+    /// Get the tag extracted from the Pem-encoded data
+    pub fn tag(&self) -> &str {
+        &self.tag
+    }
+
+    /// Get the binary contents extracted from the Pem-encoded data
+    pub fn contents(&self) -> &[u8] {
+        &self.contents
+    }
+
+    /// Consume the Pem struct to get an owned copy of the binary contents
+    pub fn into_contents(self) -> Vec<u8> {
+        self.contents
+    }
+
     fn new_from_captures(caps: Captures) -> Result<Pem> {
         fn as_utf8(bytes: &[u8]) -> Result<&str> {
             str::from_utf8(bytes).map_err(PemError::NotUtf8)
@@ -180,10 +198,7 @@ impl Pem {
         let raw_data = as_utf8(caps.data)?;
         let contents = decode_data(raw_data)?;
 
-        Ok(Pem {
-            tag: tag.to_owned(),
-            contents,
-        })
+        Ok(Pem::new(tag, contents))
     }
 }
 
@@ -221,7 +236,7 @@ impl fmt::Display for Pem {
 /// let SAMPLE_BYTES: Vec<u8> = SAMPLE.into();
 ///
 ///  let pem = parse(SAMPLE_BYTES).unwrap();
-///  assert_eq!(pem.tag, "RSA PRIVATE KEY");
+///  assert_eq!(pem.tag(), "RSA PRIVATE KEY");
 /// ```
 ///
 /// # Example: parse PEM-encoded data from a String
@@ -242,7 +257,7 @@ impl fmt::Display for Pem {
 /// let SAMPLE_STRING: String = SAMPLE.into();
 ///
 ///  let pem = parse(SAMPLE_STRING).unwrap();
-///  assert_eq!(pem.tag, "RSA PRIVATE KEY");
+///  assert_eq!(pem.tag(), "RSA PRIVATE KEY");
 /// ```
 pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
     parse_captures(input.as_ref())
@@ -282,8 +297,8 @@ pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
 ///
 ///  let pems = parse_many(SAMPLE_BYTES).unwrap();
 ///  assert_eq!(pems.len(), 2);
-///  assert_eq!(pems[0].tag, "INTERMEDIATE CERT");
-///  assert_eq!(pems[1].tag, "CERTIFICATE");
+///  assert_eq!(pems[0].tag(), "INTERMEDIATE CERT");
+///  assert_eq!(pems[1].tag(), "CERTIFICATE");
 /// ```
 ///
 /// # Example: parse a set of PEM-encoded data from a String
@@ -316,8 +331,8 @@ pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
 ///
 ///  let pems = parse_many(SAMPLE_STRING).unwrap();
 ///  assert_eq!(pems.len(), 2);
-///  assert_eq!(pems[0].tag, "INTERMEDIATE CERT");
-///  assert_eq!(pems[1].tag, "CERTIFICATE");
+///  assert_eq!(pems[0].tag(), "INTERMEDIATE CERT");
+///  assert_eq!(pems[1].tag(), "CERTIFICATE");
 /// ```
 pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Result<Vec<Pem>> {
     // Each time our regex matches a PEM section, we need to decode it.
@@ -332,11 +347,8 @@ pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Result<Vec<Pem>> {
 /// ```rust
 ///  use pem::{Pem, encode};
 ///
-///  let pem = Pem {
-///     tag: String::from("FOO"),
-///     contents: vec![1, 2, 3, 4],
-///   };
-///   encode(&pem);
+///  let pem = Pem::new("FOO", [1, 2, 3, 4]);
+///  encode(&pem);
 /// ```
 pub fn encode(pem: &Pem) -> String {
     encode_config(
@@ -354,11 +366,8 @@ pub fn encode(pem: &Pem) -> String {
 /// ```rust
 ///  use pem::{Pem, encode_config, EncodeConfig, LineEnding};
 ///
-///  let pem = Pem {
-///     tag: String::from("FOO"),
-///     contents: vec![1, 2, 3, 4],
-///   };
-///   encode_config(&pem, EncodeConfig { line_ending: LineEnding::LF });
+///  let pem = Pem::new("FOO", [1, 2, 3, 4]);
+///  encode_config(&pem, EncodeConfig { line_ending: LineEnding::LF });
 /// ```
 pub fn encode_config(pem: &Pem, config: EncodeConfig) -> String {
     let line_ending = match config.line_ending {
@@ -393,16 +402,10 @@ pub fn encode_config(pem: &Pem, config: EncodeConfig) -> String {
 ///  use pem::{Pem, encode_many};
 ///
 ///  let data = vec![
-///     Pem {
-///         tag: String::from("FOO"),
-///         contents: vec![1, 2, 3, 4],
-///     },
-///     Pem {
-///         tag: String::from("BAR"),
-///         contents: vec![5, 6, 7, 8],
-///     },
-///   ];
-///   encode_many(&data);
+///     Pem::new("FOO", [1, 2, 3, 4]),
+///     Pem::new("BAR", [5, 6, 7, 8]),
+///  ];
+///  encode_many(&data);
 /// ```
 pub fn encode_many(pems: &[Pem]) -> String {
     pems.iter()
@@ -421,14 +424,8 @@ pub fn encode_many(pems: &[Pem]) -> String {
 ///  use pem::{Pem, encode_many_config, EncodeConfig, LineEnding};
 ///
 ///  let data = vec![
-///     Pem {
-///         tag: String::from("FOO"),
-///         contents: vec![1, 2, 3, 4],
-///     },
-///     Pem {
-///         tag: String::from("BAR"),
-///         contents: vec![5, 6, 7, 8],
-///     },
+///     Pem::new("FOO", [1, 2, 3, 4]),
+///     Pem::new("BAR", [5, 6, 7, 8]),
 ///   ];
 ///   encode_many_config(&data, EncodeConfig { line_ending: LineEnding::LF });
 /// ```
@@ -539,7 +536,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
     #[test]
     fn test_parse_works() {
         let pem = parse(SAMPLE_CRLF).unwrap();
-        assert_eq!(pem.tag, "RSA PRIVATE KEY");
+        assert_eq!(pem.tag(), "RSA PRIVATE KEY");
     }
 
     #[test]
@@ -604,15 +601,15 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
         let input = "-----BEGIN DATA-----
 -----END DATA-----";
         let pem = parse(input).unwrap();
-        assert_eq!(pem.contents.len(), 0);
+        assert_eq!(pem.contents().len(), 0);
     }
 
     #[test]
     fn test_parse_many_works() {
         let pems = parse_many(SAMPLE_CRLF).unwrap();
         assert_eq!(pems.len(), 2);
-        assert_eq!(pems[0].tag, "RSA PRIVATE KEY");
-        assert_eq!(pems[1].tag, "RSA PUBLIC KEY");
+        assert_eq!(pems[0].tag(), "RSA PRIVATE KEY");
+        assert_eq!(pems[1].tag(), "RSA PUBLIC KEY");
     }
 
     #[test]
@@ -623,10 +620,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 
     #[test]
     fn test_encode_empty_contents() {
-        let pem = Pem {
-            tag: String::from("FOO"),
-            contents: vec![],
-        };
+        let pem = Pem::new("FOO", vec![]);
         let encoded = encode(&pem);
         assert!(!encoded.is_empty());
 
@@ -636,10 +630,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 
     #[test]
     fn test_encode_contents() {
-        let pem = Pem {
-            tag: String::from("FOO"),
-            contents: vec![1, 2, 3, 4],
-        };
+        let pem = Pem::new("FOO", [1, 2, 3, 4]);
         let encoded = encode(&pem);
         assert!(!encoded.is_empty());
 
@@ -657,10 +648,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 
     #[test]
     fn test_encode_config_contents() {
-        let pem = Pem {
-            tag: String::from("FOO"),
-            contents: vec![1, 2, 3, 4],
-        };
+        let pem = Pem::new("FOO", [1, 2, 3, 4]);
         let config = EncodeConfig {
             line_ending: LineEnding::LF,
         };
@@ -685,10 +673,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
     #[cfg(feature = "serde")]
     #[test]
     fn test_serde() {
-        let pem = Pem {
-            tag: String::from("Mock tag"),
-            contents: "Mock contents".as_bytes().to_vec(),
-        };
+        let pem = Pem::new("Mock tag", "Mock contents".as_bytes());
         let value = serde_json::to_string_pretty(&pem).unwrap();
         let result = serde_json::from_str(&value).unwrap();
         assert_eq!(pem, result);
@@ -786,14 +771,14 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg",
     fn test_parse_many_with_headers_crlf() {
         let pems = parse_many(HEADER_CRLF).unwrap();
         assert_eq!(pems.len(), 2);
-        assert_eq!(pems[0].tag, "CERTIFICATE");
+        assert_eq!(pems[0].tag(), "CERTIFICATE");
         assert!(cmp_data(
-            &pems[0].contents,
+            pems[0].contents(),
             &decode_data(HEADER_CRLF_DATA[0]).unwrap()
         ));
-        assert_eq!(pems[1].tag, "RSA PRIVATE KEY");
+        assert_eq!(pems[1].tag(), "RSA PRIVATE KEY");
         assert!(cmp_data(
-            &pems[1].contents,
+            pems[1].contents(),
             &decode_data(HEADER_CRLF_DATA[1]).unwrap()
         ));
     }
@@ -802,22 +787,22 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg",
     fn test_parse_many_with_headers_lf() {
         let pems = parse_many(HEADER_LF).unwrap();
         assert_eq!(pems.len(), 2);
-        assert_eq!(pems[0].tag, "CERTIFICATE");
+        assert_eq!(pems[0].tag(), "CERTIFICATE");
         assert!(cmp_data(
-            &pems[0].contents,
+            pems[0].contents(),
             &decode_data(HEADER_LF_DATA[0]).unwrap()
         ));
-        assert_eq!(pems[1].tag, "RSA PRIVATE KEY");
+        assert_eq!(pems[1].tag(), "RSA PRIVATE KEY");
         assert!(cmp_data(
-            &pems[1].contents,
+            pems[1].contents(),
             &decode_data(HEADER_LF_DATA[1]).unwrap()
         ));
     }
 
     proptest! {
         #[test]
-        fn test_str_parse_and_display(tag in ".+", contents in prop::collection::vec(0..255u8, 0..200)) {
-            let pem = Pem { tag, contents };
+        fn test_str_parse_and_display(tag in "[A-Z ]+", contents in prop::collection::vec(0..255u8, 0..200)) {
+            let pem = Pem::new(tag, contents);
             prop_assert_eq!(&pem, &pem.to_string().parse::<Pem>().unwrap());
         }
     }

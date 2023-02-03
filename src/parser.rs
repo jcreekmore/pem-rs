@@ -4,10 +4,10 @@ pub struct Captures<'a> {
     pub end: &'a [u8],
 }
 
-pub fn parse_captures<'a>(input: &'a [u8]) -> Option<Captures<'a>> {
+pub fn parse_captures(input: &[u8]) -> Option<Captures<'_>> {
     parser_inner(input).map(|(_, cap)| cap)
 }
-pub fn parse_captures_iter<'a>(input: &'a [u8]) -> CaptureMatches<'a> {
+pub fn parse_captures_iter(input: &[u8]) -> CaptureMatches<'_> {
     CaptureMatches { input }
 }
 
@@ -33,18 +33,18 @@ impl<'a> Iterator for CaptureMatches<'a> {
     }
 }
 
-fn parse_begin<'a>(input: &'a [u8]) -> Option<(&'a [u8], &'a [u8])> {
+fn parse_begin(input: &[u8]) -> Option<(&[u8], &[u8])> {
     let (input, _) = read_until(input, b"-----BEGIN ")?;
     let (input, begin) = read_until(input, b"-----")?;
     let input = skip_whitespace(input);
     Some((input, begin))
 }
 
-fn parse_payload<'a>(input: &'a [u8]) -> Option<(&'a [u8], &'a [u8])> {
+fn parse_payload(input: &[u8]) -> Option<(&[u8], &[u8])> {
     read_until(input, b"-----END ")
 }
 
-fn extract_headers_and_data<'a>(input: &'a [u8]) -> (&'a [u8], &'a [u8]) {
+fn extract_headers_and_data(input: &[u8]) -> (&[u8], &[u8]) {
     if let Some((rest, headers)) = read_until(input, b"\n\n") {
         (headers, rest)
     } else if let Some((rest, headers)) = read_until(input, b"\r\n\r\n") {
@@ -54,13 +54,13 @@ fn extract_headers_and_data<'a>(input: &'a [u8]) -> (&'a [u8], &'a [u8]) {
     }
 }
 
-fn parse_end<'a>(input: &'a [u8]) -> Option<(&'a [u8], &'a [u8])> {
+fn parse_end(input: &[u8]) -> Option<(&[u8], &[u8])> {
     let (remaining, end) = read_until(input, b"-----")?;
     let remaining = skip_whitespace(remaining);
     Some((remaining, end))
 }
 
-fn parser_inner<'a>(input: &'a [u8]) -> Option<(&'a [u8], Captures<'a>)> {
+fn parser_inner(input: &[u8]) -> Option<(&[u8], Captures<'_>)> {
     // Should be equivalent to the regex
     // "(?s)-----BEGIN (?P<begin>.*?)-----[ \t\n\r]*(?P<data>.*?)-----END (?P<end>.*?)-----[ \t\n\r]*"
 
@@ -92,7 +92,7 @@ fn skip_whitespace(mut input: &[u8]) -> &[u8] {
 }
 // Equivalent to (.*?) followed by a string
 // Returns the remaining input (after the secondary matched string) and the matched data
-fn read_until<'a, 'b>(input: &'a [u8], marker: &'b [u8]) -> Option<(&'a [u8], &'a [u8])> {
+fn read_until<'a>(input: &'a [u8], marker: &[u8]) -> Option<(&'a [u8], &'a [u8])> {
     // If there is no end condition, short circuit
     if marker.is_empty() {
         return Some((&[], input));

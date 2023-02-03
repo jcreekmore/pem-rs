@@ -4,7 +4,7 @@ extern crate pem;
 
 use criterion::Criterion;
 
-const SAMPLE: &'static str = "-----BEGIN RSA PRIVATE KEY-----\r
+const SAMPLE: &str = "-----BEGIN RSA PRIVATE KEY-----\r
 MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc\r
 dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO\r
 2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei\r
@@ -37,14 +37,14 @@ fn pem_encode(pem: &pem::Pem) {
     pem::encode(pem);
 }
 
-fn pem_encode_many(pems: &std::vec::Vec<pem::Pem>) {
+fn pem_encode_many(pems: &[pem::Pem]) {
     pem::encode_many(pems);
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
     // Parse
-    c.bench_function("pem::parse", |b| b.iter(|| pem_parse()));
-    c.bench_function("pem::parse_many", |b| b.iter(|| pem_parse_many()));
+    c.bench_function("pem::parse", |b| b.iter(pem_parse));
+    c.bench_function("pem::parse_many", |b| b.iter(pem_parse_many));
 
     // Encode
     let pem = pem::Pem {

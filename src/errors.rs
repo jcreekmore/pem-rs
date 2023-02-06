@@ -3,8 +3,9 @@
 // Licensed under the MIT license <LICENSE.md or
 // http://opensource.org/licenses/MIT>. This file may not be
 // copied, modified, or distributed except according to those terms.
+use core::fmt;
+#[cfg(any(feature = "std", test))]
 use std::error::Error;
-use std::fmt;
 
 /// The `pem` error type.
 #[derive(Debug, Eq, PartialEq)]
@@ -16,7 +17,7 @@ pub enum PemError {
     MissingEndTag,
     MissingData,
     InvalidData(::base64::DecodeError),
-    NotUtf8(::std::str::Utf8Error),
+    NotUtf8(::core::str::Utf8Error),
 }
 
 impl fmt::Display for PemError {
@@ -35,6 +36,7 @@ impl fmt::Display for PemError {
     }
 }
 
+#[cfg(any(feature = "std", test))]
 impl Error for PemError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
@@ -48,4 +50,4 @@ impl Error for PemError {
 }
 
 /// The `pem` result type.
-pub type Result<T> = ::std::result::Result<T, PemError>;
+pub type Result<T> = ::core::result::Result<T, PemError>;

@@ -4,8 +4,12 @@
 // http://opensource.org/licenses/MIT>. This file may not be
 // copied, modified, or distributed except according to those terms.
 use core::fmt;
+
 #[cfg(any(feature = "std", test))]
 use std::error::Error;
+
+#[cfg(not(any(feature = "std", test)))]
+use alloc::string::String;
 
 /// The `pem` error type.
 #[derive(Debug, Eq, PartialEq)]

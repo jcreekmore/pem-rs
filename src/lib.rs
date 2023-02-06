@@ -117,12 +117,16 @@
     unused_qualifications
 )]
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
 #[cfg(not(any(feature = "std", test)))]
 extern crate alloc;
 #[cfg(not(any(feature = "std", test)))]
-use alloc::string::String;
-#[cfg(not(any(feature = "std", test)))]
-use alloc::vec::Vec;
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 mod errors;
 mod parser;

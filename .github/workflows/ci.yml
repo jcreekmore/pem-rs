@@ -14,7 +14,7 @@ jobs:
         with:
           toolchain: 1.67.0
           components: clippy, rustfmt
-      - run: cargo fmt --all
+      - run: cargo fmt --check
       - run: cargo clippy --all-features -- --deny warnings
       - run: cargo test --all-features
       - run: cargo bench --all-features

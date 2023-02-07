@@ -21,6 +21,7 @@ pub enum PemError {
     MissingEndTag,
     MissingData,
     InvalidData(::base64::DecodeError),
+    InvalidHeader(String),
     NotUtf8(::core::str::Utf8Error),
 }
 
@@ -35,6 +36,7 @@ impl fmt::Display for PemError {
             PemError::MissingEndTag => write!(f, "missing END tag"),
             PemError::MissingData => write!(f, "missing data"),
             PemError::InvalidData(e) => write!(f, "invalid data: {e}"),
+            PemError::InvalidHeader(hdr) => write!(f, "invalid header: {hdr}"),
             PemError::NotUtf8(e) => write!(f, "invalid utf-8 value: {e}"),
         }
     }

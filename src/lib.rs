@@ -104,7 +104,6 @@
 //! The `serde` feature implements `serde::{Deserialize, Serialize}`
 //! for this crate's `Pem` struct.
 
-#![recursion_limit = "1024"]
 #![deny(
     missing_docs,
     missing_debug_implementations,
@@ -133,7 +132,7 @@ use parser::{parse_captures, parse_captures_iter, Captures};
 
 pub use crate::errors::{PemError, Result};
 use base64::Engine as _;
-use core::{fmt, str};
+use core::{fmt, slice, str};
 
 /// The line length for PEM encoding
 const LINE_WRAP: usize = 64;
@@ -158,8 +157,13 @@ pub struct EncodeConfig {
 #[derive(PartialEq, Debug, Clone)]
 pub struct Pem {
     tag: String,
+    headers: HeaderMap,
     contents: Vec<u8>,
 }
+
+/// Provides access to the headers that might be found in a Pem-encoded file
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct HeaderMap(Vec<String>);
 
 fn decode_data(raw_data: &str) -> Result<Vec<u8>> {
     // We need to get rid of newlines for base64::decode
@@ -174,11 +178,60 @@ fn decode_data(raw_data: &str) -> Result<Vec<u8>> {
     Ok(contents)
 }
 
+/// Iterator across all headers in the Pem-encoded data
+#[derive(Debug)]
+pub struct HeadersIter<'a> {
+    cur: slice::Iter<'a, String>,
+}
+
+impl<'a> Iterator for HeadersIter<'a> {
+    type Item = (&'a str, &'a str);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.cur.next().and_then(HeaderMap::split_header)
+    }
+}
+
+impl<'a> DoubleEndedIterator for HeadersIter<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.cur.next_back().and_then(HeaderMap::split_header)
+    }
+}
+
+impl HeaderMap {
+    #[allow(clippy::ptr_arg)]
+    fn split_header(header: &String) -> Option<(&str, &str)> {
+        header
+            .split_once(':')
+            .map(|(key, value)| (key.trim(), value.trim()))
+    }
+
+    fn parse(headers: Vec<String>) -> Result<HeaderMap> {
+        headers.iter().try_for_each(|hline| {
+            Self::split_header(hline)
+                .map(|_| ())
+                .ok_or_else(|| PemError::InvalidHeader(hline.to_string()))
+        })?;
+        Ok(HeaderMap(headers))
+    }
+
+    /// Get an iterator across all header key-value pairs
+    pub fn iter(&self) -> HeadersIter<'_> {
+        HeadersIter { cur: self.0.iter() }
+    }
+
+    /// Get the last set value corresponding to the header key
+    pub fn get(&self, key: &str) -> Option<&str> {
+        self.iter().rev().find(|(k, _)| *k == key).map(|(_, v)| v)
+    }
+}
+
 impl Pem {
     /// Create a new Pem struct
     pub fn new(tag: impl ToString, contents: impl Into<Vec<u8>>) -> Pem {
         Pem {
             tag: tag.to_string(),
+            headers: HeaderMap::default(),
             contents: contents.into(),
         }
     }
@@ -196,6 +249,11 @@ impl Pem {
     /// Consume the Pem struct to get an owned copy of the binary contents
     pub fn into_contents(self) -> Vec<u8> {
         self.contents
+    }
+
+    /// Get the header map for the headers in the Pem-encoded data
+    pub fn headers(&self) -> &HeaderMap {
+        &self.headers
     }
 
     fn new_from_captures(caps: Captures) -> Result<Pem> {
@@ -223,8 +281,13 @@ impl Pem {
         // If they did, then we can grab the data section
         let raw_data = as_utf8(caps.data)?;
         let contents = decode_data(raw_data)?;
+        let headers: Vec<String> = as_utf8(caps.headers)?.lines().map(str::to_string).collect();
+        let headers = HeaderMap::parse(headers)?;
 
-        Ok(Pem::new(tag, contents))
+        let mut file = Pem::new(tag, contents);
+        file.headers = headers;
+
+        Ok(file)
     }
 }
 
@@ -418,6 +481,12 @@ pub fn encode_config(pem: &Pem, config: EncodeConfig) -> String {
     };
 
     output.push_str(&format!("-----BEGIN {}-----{}", pem.tag, line_ending));
+    if !pem.headers.0.is_empty() {
+        for line in &pem.headers.0 {
+            output.push_str(&format!("{}{}", line.trim(), line_ending));
+        }
+        output.push_str(line_ending);
+    }
     for c in contents.as_bytes().chunks(LINE_WRAP) {
         output.push_str(&format!("{}{}", str::from_utf8(c).unwrap(), line_ending));
     }
@@ -836,5 +905,59 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg",
             let pem = Pem::new(tag, contents);
             prop_assert_eq!(&pem, &pem.to_string().parse::<Pem>().unwrap());
         }
+    }
+
+    #[test]
+    fn test_extract_headers() {
+        let pems = parse_many(HEADER_CRLF).unwrap();
+        let headers = pems[1].headers().iter().collect::<Vec<_>>();
+        assert_eq!(headers.len(), 2);
+        assert_eq!(headers[0].0, "Proc-Type");
+        assert_eq!(headers[0].1, "4,ENCRYPTED");
+        assert_eq!(headers[1].0, "DEK-Info");
+        assert_eq!(headers[1].1, "AES-256-CBC,975C518B7D2CCD1164A3354D1F89C5A6");
+
+        let headers = pems[1].headers().iter().rev().collect::<Vec<_>>();
+        assert_eq!(headers.len(), 2);
+        assert_eq!(headers[1].0, "Proc-Type");
+        assert_eq!(headers[1].1, "4,ENCRYPTED");
+        assert_eq!(headers[0].0, "DEK-Info");
+        assert_eq!(headers[0].1, "AES-256-CBC,975C518B7D2CCD1164A3354D1F89C5A6");
+    }
+
+    #[test]
+    fn test_get_header() {
+        let pems = parse_many(HEADER_CRLF).unwrap();
+        let headers = pems[1].headers();
+        assert_eq!(headers.get("Proc-Type"), Some("4,ENCRYPTED"));
+        assert_eq!(
+            headers.get("DEK-Info"),
+            Some("AES-256-CBC,975C518B7D2CCD1164A3354D1F89C5A6")
+        );
+    }
+
+    #[test]
+    fn test_only_get_latest() {
+        const LATEST: &str = "-----BEGIN RSA PRIVATE KEY-----
+Proc-Type: 4,ENCRYPTED
+DEK-Info: AES-256-CBC,975C518B7D2CCD1164A3354D1F89C5A6
+Proc-Type: 42,DECRYPTED
+
+MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oYo
+QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0
+RFI1MrnzRbCmOkM6tgVO0cd6r5Z4bDGLusH9yjI9iI84gPRjK0AzymXFmBGuREHI
+sQIhAPKf4pp+Prvutgq2ayygleZChBr1DC4XnnufBNtaswyvAiEAzNGVKgNvzuhk
+ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
+/+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
+RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
+-----END RSA PRIVATE KEY-----
+";
+        let pem = parse(LATEST).unwrap();
+        let headers = pem.headers();
+        assert_eq!(headers.get("Proc-Type"), Some("42,DECRYPTED"));
+        assert_eq!(
+            headers.get("DEK-Info"),
+            Some("AES-256-CBC,975C518B7D2CCD1164A3354D1F89C5A6")
+        );
     }
 }

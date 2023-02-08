@@ -111,6 +111,7 @@ mod parser;
 use parser::{parse_captures, parse_captures_iter, Captures};
 
 pub use crate::errors::{PemError, Result};
+use base64::Engine as _;
 use std::str;
 
 /// The line length for PEM encoding
@@ -147,7 +148,9 @@ fn decode_data(raw_data: &str) -> Result<Vec<u8>> {
     let data: String = raw_data.lines().map(str::trim_end).collect();
 
     // And decode it from Base64 into a vector of u8
-    let contents = base64::decode_config(data, base64::STANDARD).map_err(PemError::InvalidData)?;
+    let contents = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(PemError::InvalidData)?;
 
     Ok(contents)
 }
@@ -356,10 +359,7 @@ pub fn encode_config(pem: &Pem, config: EncodeConfig) -> String {
     let contents = if pem.contents.is_empty() {
         String::from("")
     } else {
-        base64::encode_config(
-            &pem.contents,
-            base64::Config::new(base64::CharacterSet::Standard, true),
-        )
+        base64::engine::general_purpose::STANDARD.encode(&pem.contents)
     };
 
     output.push_str(&format!("-----BEGIN {}-----{}", pem.tag, line_ending));

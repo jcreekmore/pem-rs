@@ -19,13 +19,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! pem = "1"
-//! ```
-//!
-//! and this to your crate root:
-//!
-//! ```rust
-//! extern crate pem;
+//! pem = "2"
 //! ```
 //!
 //! Using the `serde` feature will implement the serde traits for

@@ -218,6 +218,20 @@ impl HeaderMap {
     pub fn get(&self, key: &str) -> Option<&str> {
         self.iter().rev().find(|(k, _)| *k == key).map(|(_, v)| v)
     }
+
+    /// Get the last set value corresponding to the header key
+    pub fn add(&mut self, key: &str, value: &str) -> Result<()> {
+        ensure!(
+            !(key.contains(':') || key.contains('\n')),
+            PemError::InvalidHeader(key.to_string())
+        );
+        ensure!(
+            !(value.contains(':') || value.contains('\n')),
+            PemError::InvalidHeader(value.to_string())
+        );
+        self.0.push(format!("{}: {}", key.trim(), value.trim()));
+        Ok(())
+    }
 }
 
 impl Pem {
@@ -248,6 +262,11 @@ impl Pem {
     /// Get the header map for the headers in the Pem-encoded data
     pub fn headers(&self) -> &HeaderMap {
         &self.headers
+    }
+
+    /// Get the header map for modification
+    pub fn headers_mut(&mut self) -> &mut HeaderMap {
+        &mut self.headers
     }
 
     fn new_from_captures(caps: Captures) -> Result<Pem> {
@@ -897,6 +916,16 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg",
         #[test]
         fn test_str_parse_and_display(tag in "[A-Z ]+", contents in prop::collection::vec(0..255u8, 0..200)) {
             let pem = Pem::new(tag, contents);
+            prop_assert_eq!(&pem, &pem.to_string().parse::<Pem>().unwrap());
+        }
+
+        #[test]
+        fn test_str_parse_and_display_with_headers(tag in "[A-Z ]+",
+                                                   key in "[a-zA-Z]+",
+                                                   value in "[a-zA-A]+",
+                                                   contents in prop::collection::vec(0..255u8, 0..200)) {
+            let mut pem = Pem::new(tag, contents);
+            pem.headers_mut().add(&key, &value).unwrap();
             prop_assert_eq!(&pem, &pem.to_string().parse::<Pem>().unwrap());
         }
     }

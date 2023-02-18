@@ -57,3 +57,13 @@ impl Error for PemError {
 
 /// The `pem` result type.
 pub type Result<T> = ::core::result::Result<T, PemError>;
+
+#[allow(missing_docs)]
+#[macro_export]
+macro_rules! ensure {
+    ($cond:expr, $err:expr) => {
+        if !$cond {
+            return Err($err);
+        }
+    };
+}

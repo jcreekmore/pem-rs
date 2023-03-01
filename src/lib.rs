@@ -19,13 +19,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! pem = "1"
-//! ```
-//!
-//! and this to your crate root:
-//!
-//! ```rust
-//! extern crate pem;
+//! pem = "2"
 //! ```
 //!
 //! Using the `serde` feature will implement the serde traits for
@@ -53,7 +47,7 @@
 //! ";
 //!
 //!  let pem = parse(SAMPLE).unwrap();
-//!  assert_eq!(pem.tag, "RSA PRIVATE KEY");
+//!  assert_eq!(pem.tag(), "RSA PRIVATE KEY");
 //! ```
 //!
 //! # Example: parse a set of PEM-encoded test
@@ -89,11 +83,21 @@
 //!
 //!  let pems = parse_many(SAMPLE).unwrap();
 //!  assert_eq!(pems.len(), 2);
-//!  assert_eq!(pems[0].tag, "INTERMEDIATE CERT");
-//!  assert_eq!(pems[1].tag, "CERTIFICATE");
+//!  assert_eq!(pems[0].tag(), "INTERMEDIATE CERT");
+//!  assert_eq!(pems[1].tag(), "CERTIFICATE");
 //! ```
+//!
+//! # Features
+//!
+//! This crate supports two features: `std` and `serde`.
+//!
+//! The `std` feature is enabled by default. If you specify
+//! `default-features = false` to disable `std`, be aware that
+//! this crate still needs an allocator.
+//!
+//! The `serde` feature implements `serde::{Deserialize, Serialize}`
+//! for this crate's `Pem` struct.
 
-#![recursion_limit = "1024"]
 #![deny(
     missing_docs,
     missing_debug_implementations,
@@ -105,6 +109,16 @@
     unused_import_braces,
     unused_qualifications
 )]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(not(any(feature = "std", test)))]
+extern crate alloc;
+#[cfg(not(any(feature = "std", test)))]
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 mod errors;
 mod parser;
@@ -112,7 +126,7 @@ use parser::{parse_captures, parse_captures_iter, Captures};
 
 pub use crate::errors::{PemError, Result};
 use base64::Engine as _;
-use std::str;
+use core::{fmt, slice, str};
 
 /// The line length for PEM encoding
 const LINE_WRAP: usize = 64;
@@ -136,11 +150,14 @@ pub struct EncodeConfig {
 /// A representation of Pem-encoded data
 #[derive(PartialEq, Debug, Clone)]
 pub struct Pem {
-    /// The tag extracted from the Pem-encoded data
-    pub tag: String,
-    /// The binary contents of the Pem-encoded data
-    pub contents: Vec<u8>,
+    tag: String,
+    headers: HeaderMap,
+    contents: Vec<u8>,
 }
+
+/// Provides access to the headers that might be found in a Pem-encoded file
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct HeaderMap(Vec<String>);
 
 fn decode_data(raw_data: &str) -> Result<Vec<u8>> {
     // We need to get rid of newlines for base64::decode
@@ -155,7 +172,103 @@ fn decode_data(raw_data: &str) -> Result<Vec<u8>> {
     Ok(contents)
 }
 
+/// Iterator across all headers in the Pem-encoded data
+#[derive(Debug)]
+pub struct HeadersIter<'a> {
+    cur: slice::Iter<'a, String>,
+}
+
+impl<'a> Iterator for HeadersIter<'a> {
+    type Item = (&'a str, &'a str);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.cur.next().and_then(HeaderMap::split_header)
+    }
+}
+
+impl<'a> DoubleEndedIterator for HeadersIter<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.cur.next_back().and_then(HeaderMap::split_header)
+    }
+}
+
+impl HeaderMap {
+    #[allow(clippy::ptr_arg)]
+    fn split_header(header: &String) -> Option<(&str, &str)> {
+        header
+            .split_once(':')
+            .map(|(key, value)| (key.trim(), value.trim()))
+    }
+
+    fn parse(headers: Vec<String>) -> Result<HeaderMap> {
+        headers.iter().try_for_each(|hline| {
+            Self::split_header(hline)
+                .map(|_| ())
+                .ok_or_else(|| PemError::InvalidHeader(hline.to_string()))
+        })?;
+        Ok(HeaderMap(headers))
+    }
+
+    /// Get an iterator across all header key-value pairs
+    pub fn iter(&self) -> HeadersIter<'_> {
+        HeadersIter { cur: self.0.iter() }
+    }
+
+    /// Get the last set value corresponding to the header key
+    pub fn get(&self, key: &str) -> Option<&str> {
+        self.iter().rev().find(|(k, _)| *k == key).map(|(_, v)| v)
+    }
+
+    /// Get the last set value corresponding to the header key
+    pub fn add(&mut self, key: &str, value: &str) -> Result<()> {
+        ensure!(
+            !(key.contains(':') || key.contains('\n')),
+            PemError::InvalidHeader(key.to_string())
+        );
+        ensure!(
+            !(value.contains(':') || value.contains('\n')),
+            PemError::InvalidHeader(value.to_string())
+        );
+        self.0.push(format!("{}: {}", key.trim(), value.trim()));
+        Ok(())
+    }
+}
+
 impl Pem {
+    /// Create a new Pem struct
+    pub fn new(tag: impl ToString, contents: impl Into<Vec<u8>>) -> Pem {
+        Pem {
+            tag: tag.to_string(),
+            headers: HeaderMap::default(),
+            contents: contents.into(),
+        }
+    }
+
+    /// Get the tag extracted from the Pem-encoded data
+    pub fn tag(&self) -> &str {
+        &self.tag
+    }
+
+    /// Get the binary contents extracted from the Pem-encoded data
+    pub fn contents(&self) -> &[u8] {
+        &self.contents
+    }
+
+    /// Consume the Pem struct to get an owned copy of the binary contents
+    pub fn into_contents(self) -> Vec<u8> {
+        self.contents
+    }
+
+    /// Get the header map for the headers in the Pem-encoded data
+    pub fn headers(&self) -> &HeaderMap {
+        &self.headers
+    }
+
+    /// Get the header map for modification
+    pub fn headers_mut(&mut self) -> &mut HeaderMap {
+        &mut self.headers
+    }
+
     fn new_from_captures(caps: Captures) -> Result<Pem> {
         fn as_utf8(bytes: &[u8]) -> Result<&str> {
             str::from_utf8(bytes).map_err(PemError::NotUtf8)
@@ -181,11 +294,35 @@ impl Pem {
         // If they did, then we can grab the data section
         let raw_data = as_utf8(caps.data)?;
         let contents = decode_data(raw_data)?;
+        let headers: Vec<String> = as_utf8(caps.headers)?.lines().map(str::to_string).collect();
+        let headers = HeaderMap::parse(headers)?;
 
-        Ok(Pem {
-            tag: tag.to_owned(),
-            contents,
-        })
+        let mut file = Pem::new(tag, contents);
+        file.headers = headers;
+
+        Ok(file)
+    }
+}
+
+impl str::FromStr for Pem {
+    type Err = PemError;
+
+    fn from_str(s: &str) -> Result<Pem> {
+        parse(s)
+    }
+}
+
+impl TryFrom<&[u8]> for Pem {
+    type Error = PemError;
+
+    fn try_from(s: &[u8]) -> Result<Pem> {
+        parse(s)
+    }
+}
+
+impl fmt::Display for Pem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", encode(self))
     }
 }
 
@@ -209,7 +346,7 @@ impl Pem {
 /// let SAMPLE_BYTES: Vec<u8> = SAMPLE.into();
 ///
 ///  let pem = parse(SAMPLE_BYTES).unwrap();
-///  assert_eq!(pem.tag, "RSA PRIVATE KEY");
+///  assert_eq!(pem.tag(), "RSA PRIVATE KEY");
 /// ```
 ///
 /// # Example: parse PEM-encoded data from a String
@@ -230,7 +367,7 @@ impl Pem {
 /// let SAMPLE_STRING: String = SAMPLE.into();
 ///
 ///  let pem = parse(SAMPLE_STRING).unwrap();
-///  assert_eq!(pem.tag, "RSA PRIVATE KEY");
+///  assert_eq!(pem.tag(), "RSA PRIVATE KEY");
 /// ```
 pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
     parse_captures(input.as_ref())
@@ -270,8 +407,8 @@ pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
 ///
 ///  let pems = parse_many(SAMPLE_BYTES).unwrap();
 ///  assert_eq!(pems.len(), 2);
-///  assert_eq!(pems[0].tag, "INTERMEDIATE CERT");
-///  assert_eq!(pems[1].tag, "CERTIFICATE");
+///  assert_eq!(pems[0].tag(), "INTERMEDIATE CERT");
+///  assert_eq!(pems[1].tag(), "CERTIFICATE");
 /// ```
 ///
 /// # Example: parse a set of PEM-encoded data from a String
@@ -304,8 +441,8 @@ pub fn parse<B: AsRef<[u8]>>(input: B) -> Result<Pem> {
 ///
 ///  let pems = parse_many(SAMPLE_STRING).unwrap();
 ///  assert_eq!(pems.len(), 2);
-///  assert_eq!(pems[0].tag, "INTERMEDIATE CERT");
-///  assert_eq!(pems[1].tag, "CERTIFICATE");
+///  assert_eq!(pems[0].tag(), "INTERMEDIATE CERT");
+///  assert_eq!(pems[1].tag(), "CERTIFICATE");
 /// ```
 pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Result<Vec<Pem>> {
     // Each time our regex matches a PEM section, we need to decode it.
@@ -320,11 +457,8 @@ pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Result<Vec<Pem>> {
 /// ```rust
 ///  use pem::{Pem, encode};
 ///
-///  let pem = Pem {
-///     tag: String::from("FOO"),
-///     contents: vec![1, 2, 3, 4],
-///   };
-///   encode(&pem);
+///  let pem = Pem::new("FOO", [1, 2, 3, 4]);
+///  encode(&pem);
 /// ```
 pub fn encode(pem: &Pem) -> String {
     encode_config(
@@ -342,11 +476,8 @@ pub fn encode(pem: &Pem) -> String {
 /// ```rust
 ///  use pem::{Pem, encode_config, EncodeConfig, LineEnding};
 ///
-///  let pem = Pem {
-///     tag: String::from("FOO"),
-///     contents: vec![1, 2, 3, 4],
-///   };
-///   encode_config(&pem, EncodeConfig { line_ending: LineEnding::LF });
+///  let pem = Pem::new("FOO", [1, 2, 3, 4]);
+///  encode_config(&pem, EncodeConfig { line_ending: LineEnding::LF });
 /// ```
 pub fn encode_config(pem: &Pem, config: EncodeConfig) -> String {
     let line_ending = match config.line_ending {
@@ -363,6 +494,12 @@ pub fn encode_config(pem: &Pem, config: EncodeConfig) -> String {
     };
 
     output.push_str(&format!("-----BEGIN {}-----{}", pem.tag, line_ending));
+    if !pem.headers.0.is_empty() {
+        for line in &pem.headers.0 {
+            output.push_str(&format!("{}{}", line.trim(), line_ending));
+        }
+        output.push_str(line_ending);
+    }
     for c in contents.as_bytes().chunks(LINE_WRAP) {
         output.push_str(&format!("{}{}", str::from_utf8(c).unwrap(), line_ending));
     }
@@ -378,16 +515,10 @@ pub fn encode_config(pem: &Pem, config: EncodeConfig) -> String {
 ///  use pem::{Pem, encode_many};
 ///
 ///  let data = vec![
-///     Pem {
-///         tag: String::from("FOO"),
-///         contents: vec![1, 2, 3, 4],
-///     },
-///     Pem {
-///         tag: String::from("BAR"),
-///         contents: vec![5, 6, 7, 8],
-///     },
-///   ];
-///   encode_many(&data);
+///     Pem::new("FOO", [1, 2, 3, 4]),
+///     Pem::new("BAR", [5, 6, 7, 8]),
+///  ];
+///  encode_many(&data);
 /// ```
 pub fn encode_many(pems: &[Pem]) -> String {
     pems.iter()
@@ -406,14 +537,8 @@ pub fn encode_many(pems: &[Pem]) -> String {
 ///  use pem::{Pem, encode_many_config, EncodeConfig, LineEnding};
 ///
 ///  let data = vec![
-///     Pem {
-///         tag: String::from("FOO"),
-///         contents: vec![1, 2, 3, 4],
-///     },
-///     Pem {
-///         tag: String::from("BAR"),
-///         contents: vec![5, 6, 7, 8],
-///     },
+///     Pem::new("FOO", [1, 2, 3, 4]),
+///     Pem::new("BAR", [5, 6, 7, 8]),
 ///   ];
 ///   encode_many_config(&data, EncodeConfig { line_ending: LineEnding::LF });
 /// ```
@@ -476,6 +601,7 @@ mod serde_impl {
 #[cfg(test)]
 mod test {
     use super::*;
+    use proptest::prelude::*;
     use std::error::Error;
 
     const SAMPLE_CRLF: &str = "-----BEGIN RSA PRIVATE KEY-----\r
@@ -523,7 +649,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
     #[test]
     fn test_parse_works() {
         let pem = parse(SAMPLE_CRLF).unwrap();
-        assert_eq!(pem.tag, "RSA PRIVATE KEY");
+        assert_eq!(pem.tag(), "RSA PRIVATE KEY");
     }
 
     #[test]
@@ -588,15 +714,15 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
         let input = "-----BEGIN DATA-----
 -----END DATA-----";
         let pem = parse(input).unwrap();
-        assert_eq!(pem.contents.len(), 0);
+        assert_eq!(pem.contents().len(), 0);
     }
 
     #[test]
     fn test_parse_many_works() {
         let pems = parse_many(SAMPLE_CRLF).unwrap();
         assert_eq!(pems.len(), 2);
-        assert_eq!(pems[0].tag, "RSA PRIVATE KEY");
-        assert_eq!(pems[1].tag, "RSA PUBLIC KEY");
+        assert_eq!(pems[0].tag(), "RSA PRIVATE KEY");
+        assert_eq!(pems[1].tag(), "RSA PUBLIC KEY");
     }
 
     #[test]
@@ -607,10 +733,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 
     #[test]
     fn test_encode_empty_contents() {
-        let pem = Pem {
-            tag: String::from("FOO"),
-            contents: vec![],
-        };
+        let pem = Pem::new("FOO", vec![]);
         let encoded = encode(&pem);
         assert!(!encoded.is_empty());
 
@@ -620,10 +743,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 
     #[test]
     fn test_encode_contents() {
-        let pem = Pem {
-            tag: String::from("FOO"),
-            contents: vec![1, 2, 3, 4],
-        };
+        let pem = Pem::new("FOO", [1, 2, 3, 4]);
         let encoded = encode(&pem);
         assert!(!encoded.is_empty());
 
@@ -641,10 +761,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 
     #[test]
     fn test_encode_config_contents() {
-        let pem = Pem {
-            tag: String::from("FOO"),
-            contents: vec![1, 2, 3, 4],
-        };
+        let pem = Pem::new("FOO", [1, 2, 3, 4]);
         let config = EncodeConfig {
             line_ending: LineEnding::LF,
         };
@@ -669,10 +786,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
     #[cfg(feature = "serde")]
     #[test]
     fn test_serde() {
-        let pem = Pem {
-            tag: String::from("Mock tag"),
-            contents: "Mock contents".as_bytes().to_vec(),
-        };
+        let pem = Pem::new("Mock tag", "Mock contents".as_bytes());
         let value = serde_json::to_string_pretty(&pem).unwrap();
         let result = serde_json::from_str(&value).unwrap();
         assert_eq!(pem, result);
@@ -770,14 +884,14 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg",
     fn test_parse_many_with_headers_crlf() {
         let pems = parse_many(HEADER_CRLF).unwrap();
         assert_eq!(pems.len(), 2);
-        assert_eq!(pems[0].tag, "CERTIFICATE");
+        assert_eq!(pems[0].tag(), "CERTIFICATE");
         assert!(cmp_data(
-            &pems[0].contents,
+            pems[0].contents(),
             &decode_data(HEADER_CRLF_DATA[0]).unwrap()
         ));
-        assert_eq!(pems[1].tag, "RSA PRIVATE KEY");
+        assert_eq!(pems[1].tag(), "RSA PRIVATE KEY");
         assert!(cmp_data(
-            &pems[1].contents,
+            pems[1].contents(),
             &decode_data(HEADER_CRLF_DATA[1]).unwrap()
         ));
     }
@@ -786,15 +900,87 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg",
     fn test_parse_many_with_headers_lf() {
         let pems = parse_many(HEADER_LF).unwrap();
         assert_eq!(pems.len(), 2);
-        assert_eq!(pems[0].tag, "CERTIFICATE");
+        assert_eq!(pems[0].tag(), "CERTIFICATE");
         assert!(cmp_data(
-            &pems[0].contents,
+            pems[0].contents(),
             &decode_data(HEADER_LF_DATA[0]).unwrap()
         ));
-        assert_eq!(pems[1].tag, "RSA PRIVATE KEY");
+        assert_eq!(pems[1].tag(), "RSA PRIVATE KEY");
         assert!(cmp_data(
-            &pems[1].contents,
+            pems[1].contents(),
             &decode_data(HEADER_LF_DATA[1]).unwrap()
         ));
+    }
+
+    proptest! {
+        #[test]
+        fn test_str_parse_and_display(tag in "[A-Z ]+", contents in prop::collection::vec(0..255u8, 0..200)) {
+            let pem = Pem::new(tag, contents);
+            prop_assert_eq!(&pem, &pem.to_string().parse::<Pem>().unwrap());
+        }
+
+        #[test]
+        fn test_str_parse_and_display_with_headers(tag in "[A-Z ]+",
+                                                   key in "[a-zA-Z]+",
+                                                   value in "[a-zA-A]+",
+                                                   contents in prop::collection::vec(0..255u8, 0..200)) {
+            let mut pem = Pem::new(tag, contents);
+            pem.headers_mut().add(&key, &value).unwrap();
+            prop_assert_eq!(&pem, &pem.to_string().parse::<Pem>().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_extract_headers() {
+        let pems = parse_many(HEADER_CRLF).unwrap();
+        let headers = pems[1].headers().iter().collect::<Vec<_>>();
+        assert_eq!(headers.len(), 2);
+        assert_eq!(headers[0].0, "Proc-Type");
+        assert_eq!(headers[0].1, "4,ENCRYPTED");
+        assert_eq!(headers[1].0, "DEK-Info");
+        assert_eq!(headers[1].1, "AES-256-CBC,975C518B7D2CCD1164A3354D1F89C5A6");
+
+        let headers = pems[1].headers().iter().rev().collect::<Vec<_>>();
+        assert_eq!(headers.len(), 2);
+        assert_eq!(headers[1].0, "Proc-Type");
+        assert_eq!(headers[1].1, "4,ENCRYPTED");
+        assert_eq!(headers[0].0, "DEK-Info");
+        assert_eq!(headers[0].1, "AES-256-CBC,975C518B7D2CCD1164A3354D1F89C5A6");
+    }
+
+    #[test]
+    fn test_get_header() {
+        let pems = parse_many(HEADER_CRLF).unwrap();
+        let headers = pems[1].headers();
+        assert_eq!(headers.get("Proc-Type"), Some("4,ENCRYPTED"));
+        assert_eq!(
+            headers.get("DEK-Info"),
+            Some("AES-256-CBC,975C518B7D2CCD1164A3354D1F89C5A6")
+        );
+    }
+
+    #[test]
+    fn test_only_get_latest() {
+        const LATEST: &str = "-----BEGIN RSA PRIVATE KEY-----
+Proc-Type: 4,ENCRYPTED
+DEK-Info: AES-256-CBC,975C518B7D2CCD1164A3354D1F89C5A6
+Proc-Type: 42,DECRYPTED
+
+MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oYo
+QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0
+RFI1MrnzRbCmOkM6tgVO0cd6r5Z4bDGLusH9yjI9iI84gPRjK0AzymXFmBGuREHI
+sQIhAPKf4pp+Prvutgq2ayygleZChBr1DC4XnnufBNtaswyvAiEAzNGVKgNvzuhk
+ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6
+/+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g
+RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
+-----END RSA PRIVATE KEY-----
+";
+        let pem = parse(LATEST).unwrap();
+        let headers = pem.headers();
+        assert_eq!(headers.get("Proc-Type"), Some("42,DECRYPTED"));
+        assert_eq!(
+            headers.get("DEK-Info"),
+            Some("AES-256-CBC,975C518B7D2CCD1164A3354D1F89C5A6")
+        );
     }
 }

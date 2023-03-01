@@ -14,7 +14,11 @@ jobs:
         with:
           toolchain: 1.67.0
           components: clippy, rustfmt
-      - run: cargo fmt --all
+      - run: cargo fmt --check
       - run: cargo clippy --all-features -- --deny warnings
       - run: cargo test --all-features
       - run: cargo bench --all-features
+      # For no_std we use check instead of test because
+      # std is required for the test suite to run.
+      - run: cargo clippy --no-default-features -- --deny warnings
+      - run: cargo check --no-default-features

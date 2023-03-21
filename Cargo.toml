@@ -7,7 +7,7 @@ license = "MIT"
 name = "pem"
 readme = "README.md"
 repository = "https://github.com/jcreekmore/pem-rs.git"
-version = "1.1.2-alpha.0"
+version = "2.0.0"
 categories = [ "cryptography" ]
 keywords = [
     "no-std",

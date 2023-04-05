@@ -1,3 +1,8 @@
+# 2.0.1
+
+ - Fix serde support on no\_std
+ - Drop MSRV to 1.60
+
 # 2.0
 
  - Add no\_std support

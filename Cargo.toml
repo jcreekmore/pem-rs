@@ -33,9 +33,8 @@ features = ["alloc"]
 
 [dependencies.serde]
 version = "1"
-optional = true
 default-features = false
-features = ["serde_derive"]
+optional = true
 
 [dev-dependencies]
 criterion = "0.3.0"

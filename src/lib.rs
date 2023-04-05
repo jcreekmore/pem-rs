@@ -556,11 +556,11 @@ pub fn encode_many_config(pems: &[Pem], config: EncodeConfig) -> String {
 #[cfg(feature = "serde")]
 mod serde_impl {
     use super::{encode, parse, Pem};
+    use core::fmt;
     use serde::{
         de::{Error, Visitor},
         Deserialize, Serialize,
     };
-    use std::fmt;
 
     impl Serialize for Pem {
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

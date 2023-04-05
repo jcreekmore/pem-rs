@@ -22,3 +22,5 @@ jobs:
       # std is required for the test suite to run.
       - run: cargo clippy --no-default-features -- --deny warnings
       - run: cargo check --no-default-features
+      # Ensure that serde support works without std
+      - run: cargo check --no-default-features --features serde

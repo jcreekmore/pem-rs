@@ -144,7 +144,10 @@ pub enum LineEnding {
 #[derive(Debug, Clone, Copy)]
 pub struct EncodeConfig {
     /// Line ending to use during encoding
-    pub line_ending: LineEnding,
+    line_ending: LineEnding,
+
+    /// Line length to use during encoding
+    line_wrap: usize,
 }
 
 /// A representation of Pem-encoded data
@@ -231,6 +234,34 @@ impl HeaderMap {
         );
         self.0.push(format!("{}: {}", key.trim(), value.trim()));
         Ok(())
+    }
+}
+
+impl EncodeConfig {
+    /// Create a new encode config with default values.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the line ending to use for the encoding.
+    pub fn set_line_ending(mut self, line_ending: LineEnding) -> Self {
+        self.line_ending = line_ending;
+        self
+    }
+
+    /// Set the line length to use for the encoding.
+    pub fn set_line_wrap(mut self, line_wrap: usize) -> Self {
+        self.line_wrap = line_wrap;
+        self
+    }
+}
+
+impl Default for EncodeConfig {
+    fn default() -> Self {
+        Self {
+            line_ending: LineEnding::CRLF,
+            line_wrap: LINE_WRAP,
+        }
     }
 }
 
@@ -461,12 +492,7 @@ pub fn parse_many<B: AsRef<[u8]>>(input: B) -> Result<Vec<Pem>> {
 ///  encode(&pem);
 /// ```
 pub fn encode(pem: &Pem) -> String {
-    encode_config(
-        pem,
-        EncodeConfig {
-            line_ending: LineEnding::CRLF,
-        },
-    )
+    encode_config(pem, EncodeConfig::default())
 }
 
 /// Encode a PEM struct into a PEM-encoded data string with additional
@@ -500,7 +526,7 @@ pub fn encode_config(pem: &Pem, config: EncodeConfig) -> String {
         }
         output.push_str(line_ending);
     }
-    for c in contents.as_bytes().chunks(LINE_WRAP) {
+    for c in contents.as_bytes().chunks(config.line_wrap) {
         output.push_str(&format!("{}{}", str::from_utf8(c).unwrap(), line_ending));
     }
     output.push_str(&format!("-----END {}-----{}", pem.tag, line_ending));
@@ -646,6 +672,17 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 -----END RSA PUBLIC KEY-----
 ";
 
+    const SAMPLE_DEFAULT_LINE_WRAP: &str = "-----BEGIN TEST-----\r
+AQIDBA==\r
+-----END TEST-----\r
+";
+
+    const SAMPLE_CUSTOM_LINE_WRAP_4: &str = "-----BEGIN TEST-----\r
+AQID\r
+BA==\r
+-----END TEST-----\r
+";
+
     #[test]
     fn test_parse_works() {
         let pem = parse(SAMPLE_CRLF).unwrap();
@@ -732,6 +769,20 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
     }
 
     #[test]
+    fn test_encode_default_line_wrap() {
+        let pem = Pem::new("TEST", vec![1, 2, 3, 4]);
+        assert_eq!(encode(&pem), SAMPLE_DEFAULT_LINE_WRAP);
+    }
+
+    #[test]
+    fn test_encode_custom_line_wrap_4() {
+        let pem = Pem::new("TEST", vec![1, 2, 3, 4]);
+        assert_eq!(
+            encode_config(&pem, EncodeConfig::default().set_line_wrap(4)),
+            SAMPLE_CUSTOM_LINE_WRAP_4
+        );
+    }
+    #[test]
     fn test_encode_empty_contents() {
         let pem = Pem::new("FOO", vec![]);
         let encoded = encode(&pem);
@@ -762,9 +813,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
     #[test]
     fn test_encode_config_contents() {
         let pem = Pem::new("FOO", [1, 2, 3, 4]);
-        let config = EncodeConfig {
-            line_ending: LineEnding::LF,
-        };
+        let config = EncodeConfig::default().set_line_ending(LineEnding::LF);
         let encoded = encode_config(&pem, config);
         assert!(!encoded.is_empty());
 
@@ -775,9 +824,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
     #[test]
     fn test_encode_many_config() {
         let pems = parse_many(SAMPLE_LF).unwrap();
-        let config = EncodeConfig {
-            line_ending: LineEnding::LF,
-        };
+        let config = EncodeConfig::default().set_line_ending(LineEnding::LF);
         let encoded = encode_many_config(&pems, config);
 
         assert_eq!(SAMPLE_LF, encoded);

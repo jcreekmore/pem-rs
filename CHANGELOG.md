@@ -1,3 +1,6 @@
+# Unreleased
+ - trim `proptest` features to prevent an MSRV break for testing
+
 # 2.0.1
 
  - Fix serde support on no\_std

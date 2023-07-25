@@ -503,7 +503,7 @@ pub fn encode(pem: &Pem) -> String {
 ///  use pem::{Pem, encode_config, EncodeConfig, LineEnding};
 ///
 ///  let pem = Pem::new("FOO", [1, 2, 3, 4]);
-///  encode_config(&pem, EncodeConfig { line_ending: LineEnding::LF });
+///  encode_config(&pem, EncodeConfig::new().set_line_ending(LineEnding::LF));
 /// ```
 pub fn encode_config(pem: &Pem, config: EncodeConfig) -> String {
     let line_ending = match config.line_ending {
@@ -566,7 +566,7 @@ pub fn encode_many(pems: &[Pem]) -> String {
 ///     Pem::new("FOO", [1, 2, 3, 4]),
 ///     Pem::new("BAR", [5, 6, 7, 8]),
 ///   ];
-///   encode_many_config(&data, EncodeConfig { line_ending: LineEnding::LF });
+///   encode_many_config(&data, EncodeConfig::new().set_line_ending(LineEnding::LF));
 /// ```
 pub fn encode_many_config(pems: &[Pem], config: EncodeConfig) -> String {
     let line_ending = match config.line_ending {

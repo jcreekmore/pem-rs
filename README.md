@@ -15,7 +15,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-pem = "2.0"
+pem = "3.0"
 ```
 
 Here is a simple example that parse PEM-encoded data and prints the tag:

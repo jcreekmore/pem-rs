@@ -1,4 +1,4 @@
-# Unreleased
+# 3.0.0
  - trim `proptest` features to prevent an MSRV break for testing
  - make EncodeConfig struct extendable and add a line_wrap config option
 

@@ -1,3 +1,6 @@
+# 3.0.1
+ - reduce allocations in `pem::encode`
+
 # 3.0.0
  - trim `proptest` features to prevent an MSRV break for testing
  - make EncodeConfig struct extendable and add a line_wrap config option

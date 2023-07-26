@@ -126,6 +126,7 @@ use parser::{parse_captures, parse_captures_iter, Captures};
 
 pub use crate::errors::{PemError, Result};
 use base64::Engine as _;
+use core::fmt::Write;
 use core::{fmt, slice, str};
 
 /// The line length for PEM encoding
@@ -519,17 +520,17 @@ pub fn encode_config(pem: &Pem, config: EncodeConfig) -> String {
         base64::engine::general_purpose::STANDARD.encode(&pem.contents)
     };
 
-    output.push_str(&format!("-----BEGIN {}-----{}", pem.tag, line_ending));
+    write!(output, "-----BEGIN {}-----{}", pem.tag, line_ending).unwrap();
     if !pem.headers.0.is_empty() {
         for line in &pem.headers.0 {
-            output.push_str(&format!("{}{}", line.trim(), line_ending));
+            write!(output, "{}{}", line.trim(), line_ending).unwrap();
         }
         output.push_str(line_ending);
     }
     for c in contents.as_bytes().chunks(config.line_wrap) {
-        output.push_str(&format!("{}{}", str::from_utf8(c).unwrap(), line_ending));
+        write!(output, "{}{}", str::from_utf8(c).unwrap(), line_ending).unwrap();
     }
-    output.push_str(&format!("-----END {}-----{}", pem.tag, line_ending));
+    write!(output, "-----END {}-----{}", pem.tag, line_ending).unwrap();
 
     output
 }

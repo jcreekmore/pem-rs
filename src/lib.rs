@@ -240,18 +240,21 @@ impl HeaderMap {
 
 impl EncodeConfig {
     /// Create a new encode config with default values.
-    pub fn new() -> Self {
-        Self::default()
+    pub const fn new() -> Self {
+        Self {
+            line_ending: LineEnding::CRLF,
+            line_wrap: LINE_WRAP,
+        }
     }
 
     /// Set the line ending to use for the encoding.
-    pub fn set_line_ending(mut self, line_ending: LineEnding) -> Self {
+    pub const fn set_line_ending(mut self, line_ending: LineEnding) -> Self {
         self.line_ending = line_ending;
         self
     }
 
     /// Set the line length to use for the encoding.
-    pub fn set_line_wrap(mut self, line_wrap: usize) -> Self {
+    pub const fn set_line_wrap(mut self, line_wrap: usize) -> Self {
         self.line_wrap = line_wrap;
         self
     }
@@ -259,10 +262,7 @@ impl EncodeConfig {
 
 impl Default for EncodeConfig {
     fn default() -> Self {
-        Self {
-            line_ending: LineEnding::CRLF,
-            line_wrap: LINE_WRAP,
-        }
+        Self::new()
     }
 }
 

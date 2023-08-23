@@ -1,3 +1,6 @@
+# 3.0.2
+ - allow EncodeConfig to be built in a const context
+
 # 3.0.1
  - reduce allocations in `pem::encode`
 

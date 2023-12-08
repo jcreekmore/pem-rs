@@ -50,7 +50,7 @@
 //!  assert_eq!(pem.tag(), "RSA PRIVATE KEY");
 //! ```
 //!
-//! # Example: parse a set of PEM-encoded test
+//! # Example: parse a set of PEM-encoded text chunks
 //!
 //! Sometimes, PEM-encoded files contain multiple chunks of PEM-encoded
 //! text. You might see this if you have an x.509 certificate file that

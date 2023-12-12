@@ -164,9 +164,9 @@ pub struct Pem {
 pub struct HeaderMap(Vec<String>);
 
 fn decode_data(raw_data: &str) -> Result<Vec<u8>> {
-    // We need to get rid of newlines for base64::decode
+    // We need to get rid of newlines/whitespaces for base64::decode
     // As base64 requires an AsRef<[u8]>, this must involve a copy
-    let data: String = raw_data.lines().map(str::trim_end).collect();
+    let data: String = raw_data.chars().filter(|c| !c.is_whitespace()).collect();
 
     // And decode it from Base64 into a vector of u8
     let contents = base64::engine::general_purpose::STANDARD
@@ -673,6 +673,27 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
 -----END RSA PUBLIC KEY-----
 ";
 
+    const SAMPLE_WS: &str = "-----BEGIN RSA PRIVATE KEY-----
+MIIBPQIBAAJBAOsfi5AGYhdRs/x6q5H7kScxA0Kzzqe6WI6gf6+tc6IvKQJo5rQc \
+dWWSQ0nRGt2hOPDO+35NKhQEjBQxPh/v7n0CAwEAAQJBAOGaBAyuw0ICyENy5NsO \
+2gkT00AWTSzM9Zns0HedY31yEabkuFvrMCHjscEF7u3Y6PB7An3IzooBHchsFDei \
+AAECIQD/JahddzR5K3A6rzTidmAf1PBtqi7296EnWv8WvpfAAQIhAOvowIXZI4Un \
+DXjgZ9ekuUjZN+GUQRAVlkEEohGLVy59AiEA90VtqDdQuWWpvJX0cM08V10tLXrT \
+TTGsEtITid1ogAECIQDAaFl90ZgS5cMrL3wCeatVKzVUmuJmB/VAmlLFFGzK0QIh \
+ANJGc7AFk4fyFD/OezhwGHbWmo/S+bfeAiIh2Ss2FxKJ
+-----END RSA PRIVATE KEY-----
+
+-----BEGIN RSA PUBLIC KEY-----
+MIIBOgIBAAJBAMIeCnn9G/7g2Z6J+qHOE2XCLLuPoh5NHTO2Fm+PbzBvafBo0oYo \
+QVVy7frzxmOqx6iIZBxTyfAQqBPO3Br59BMCAwEAAQJAX+PjHPuxdqiwF6blTkS0 \
+RFI1MrnzRbCmOkM6tgVO0cd6r5Z4bDGLusH9yjI9iI84gPRjK0AzymXFmBGuREHI \
+sQIhAPKf4pp+Prvutgq2ayygleZChBr1DC4XnnufBNtaswyvAiEAzNGVKgNvzuhk \
+ijoUXIDruJQEGFGvZTsi1D2RehXiT90CIQC4HOQUYKCydB7oWi1SHDokFW2yFyo6 \
+/+lf3fgNjPI6OQIgUPmTFXciXxT1msh3gFLf3qt2Kv8wbr9Ad9SXjULVpGkCIB+g \
+RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
+-----END RSA PUBLIC KEY-----
+";
+
     const SAMPLE_DEFAULT_LINE_WRAP: &str = "-----BEGIN TEST-----\r
 AQIDBA==\r
 -----END TEST-----\r
@@ -687,6 +708,12 @@ BA==\r
     #[test]
     fn test_parse_works() {
         let pem = parse(SAMPLE_CRLF).unwrap();
+        assert_eq!(pem.tag(), "RSA PRIVATE KEY");
+    }
+
+    #[test]
+    fn test_parse_empty_space() {
+        let pem = parse(SAMPLE_WS).unwrap();
         assert_eq!(pem.tag(), "RSA PRIVATE KEY");
     }
 

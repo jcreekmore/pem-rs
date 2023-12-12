@@ -1,3 +1,6 @@
+# 3.0.3
+ - allow general whitespace separators instead of just newlines
+
 # 3.0.2
  - allow EncodeConfig to be built in a const context
 

@@ -767,7 +767,7 @@ RzHX0lkJl9Stshd/7Gbt65/QYq+v+xvAeT0CoyIg
             Err(e @ PemError::InvalidData(_)) => {
                 assert_eq!(
                     &format!("{}", e.source().unwrap()),
-                    "Invalid byte 63, offset 63."
+                    "Invalid symbol 63, offset 63."
                 );
             }
             _ => unreachable!(),

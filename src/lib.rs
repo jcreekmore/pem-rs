@@ -19,7 +19,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! pem = "2"
+//! pem = "3"
 //! ```
 //!
 //! Using the `serde` feature will implement the serde traits for

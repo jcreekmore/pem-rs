@@ -1,3 +1,9 @@
+# 3.0.5
+ - updated base version in the docs
+
+# 3.0.4
+ - updated base64 to 0.22.0
+
 # 3.0.3
  - allow general whitespace separators instead of just newlines
 

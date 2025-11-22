@@ -133,12 +133,24 @@ use core::{fmt, slice, str};
 const LINE_WRAP: usize = 64;
 
 /// Enum describing line endings
+///
+/// Default is `LF` on Unix-like systems and `CRLF` on Windows.
 #[derive(Debug, Clone, Copy)]
 pub enum LineEnding {
     /// Windows-like (`\r\n`)
     CRLF,
     /// Unix-like (`\n`)
     LF,
+}
+
+impl Default for LineEnding {
+    fn default() -> Self {
+        if cfg!(windows) {
+            Self::CRLF
+        } else {
+            Self::LF
+        }
+    }
 }
 
 /// Configuration for Pem encoding
@@ -242,7 +254,10 @@ impl EncodeConfig {
     /// Create a new encode config with default values.
     pub const fn new() -> Self {
         Self {
+            #[cfg(windows)]
             line_ending: LineEnding::CRLF,
+            #[cfg(not(windows))]
+            line_ending: LineEnding::LF,
             line_wrap: LINE_WRAP,
         }
     }

@@ -27,7 +27,7 @@ std = [
 serde = ["dep:serde_core"]
 
 [dependencies.base64]
-version = "0.22.0"
+version = "0.23.0"
 default-features = false
 features = ["alloc"]
 
